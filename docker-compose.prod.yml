@@ -1,0 +1,53 @@
+services:
+  gateway:
+    image: ${REGISTRY:-ghcr.io}/minisource/gateway:${VERSION:-latest}
+    container_name: minisource-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_HOST=0.0.0.0
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
+      - NOTIFIER_SERVICE_URL=${NOTIFIER_SERVICE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-100}
+      - CIRCUIT_ENABLED=true
+      - TRACING_ENABLED=${TRACING_ENABLED:-true}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_ENDPOINT}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=json
+    networks:
+      - minisource-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+
+networks:
+  minisource-network:
+    external: true

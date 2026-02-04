@@ -1,0 +1,190 @@
+routes:
+  # ============================================
+  # Authentication Routes (Public)
+  # ============================================
+  - path: /api/v1/auth/login
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+    rateLimit:
+      requestsPerSec: 10
+      burstSize: 20
+
+  - path: /api/v1/auth/register
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+    rateLimit:
+      requestsPerSec: 5
+      burstSize: 10
+
+  - path: /api/v1/auth/refresh
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+
+  - path: /api/v1/auth/verify-email
+    service: auth
+    stripPrefix: false
+    methods: [POST, GET]
+    public: true
+    circuitBreaker: true
+
+  - path: /api/v1/auth/forgot-password
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+    rateLimit:
+      requestsPerSec: 3
+      burstSize: 5
+
+  - path: /api/v1/auth/reset-password
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Authentication Routes (Protected)
+  # ============================================
+  - path: /api/v1/auth
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/auth/logout
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/auth/me
+    service: auth
+    stripPrefix: false
+    methods: [GET]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/auth/change-password
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # User Management Routes
+  # ============================================
+  - path: /api/v1/users
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Role & Permission Routes
+  # ============================================
+  - path: /api/v1/roles
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/permissions
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Admin Routes
+  # ============================================
+  - path: /api/v1/admin
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Notification Routes
+  # ============================================
+  - path: /api/v1/notifications
+    service: notifier
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/notifications/send
+    service: notifier
+    stripPrefix: false
+    methods: [POST]
+    public: false
+    circuitBreaker: true
+    rateLimit:
+      requestsPerSec: 50
+      burstSize: 100
+
+  # ============================================
+  # Template Routes
+  # ============================================
+  - path: /api/v1/templates
+    service: notifier
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Preference Routes
+  # ============================================
+  - path: /api/v1/preferences
+    service: notifier
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Health & Monitoring (Public)
+  # ============================================
+  - path: /health
+    service: gateway
+    methods: [GET]
+    public: true
+
+  - path: /ready
+    service: gateway
+    methods: [GET]
+    public: true
+
+  - path: /live
+    service: gateway
+    methods: [GET]
+    public: true
+
+  - path: /metrics
+    service: gateway
+    methods: [GET]
+    public: true
+
+  - path: /circuit-breakers
+    service: gateway
+    methods: [GET]
+    public: true
