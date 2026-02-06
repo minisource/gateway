@@ -1,0 +1,14 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-push:
+    uses: minisource/.github/.github/workflows/build-and-push.yml@main
+    with:
+      image-name: minisource/gateway
+    secrets: inherit
