@@ -13,7 +13,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/swagger"
 	"github.com/minisource/gateway/config"
+	_ "github.com/minisource/gateway/docs" // Swagger docs
 	"github.com/minisource/gateway/internal/handler"
 	"github.com/minisource/gateway/internal/middleware"
 	"github.com/minisource/gateway/internal/proxy"
@@ -22,6 +24,15 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// @title Gateway Service API
+// @version 1.0
+// @description API Gateway service for Minisource
+// @host localhost:8080
+// @BasePath /api/v1
+// @schemes http https
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
@@ -99,6 +110,9 @@ func main() {
 
 	// Prometheus metrics endpoint
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+
+	// Swagger route
+	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	// Circuit breaker status endpoint
 	app.Get("/circuit-breakers", func(c *fiber.Ctx) error {

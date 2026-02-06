@@ -88,6 +88,11 @@ clean:
 	rm -rf bin/
 	rm -f coverage.out coverage.html
 
+## swagger: Generate Swagger documentation
+swagger:
+	@echo "Generating Swagger documentation..."
+	@swag init -g cmd/main.go -o docs --parseDependency --parseInternal
+
 ## docker-build: Build Docker image
 docker-build:
 	@echo "Building Docker image..."
