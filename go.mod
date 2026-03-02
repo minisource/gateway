@@ -7,7 +7,7 @@ toolchain go1.24.4
 replace github.com/minisource/go-common => ../go-common
 
 require (
-	github.com/gofiber/fiber/v2 v2.52.11
+	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/gofiber/swagger v1.1.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
