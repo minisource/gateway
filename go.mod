@@ -14,7 +14,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/redis/go-redis/v9 v9.7.0
-	github.com/sony/gobreaker v0.5.0
+	github.com/sony/gobreaker v1.0.0
 	github.com/swaggo/swag v1.16.4
 	github.com/valyala/fasthttp v1.63.0
 	go.opentelemetry.io/otel v1.40.0
