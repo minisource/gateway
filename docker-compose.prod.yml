@@ -1,6 +1,6 @@
 services:
   gateway:
-    image: ${REGISTRY:-ghcr.io}/minisource/gateway:${VERSION:-latest}
+    image: minisource/gateway:${TAG:-latest}
     container_name: minisource-gateway
     ports:
       - "8080:8080"

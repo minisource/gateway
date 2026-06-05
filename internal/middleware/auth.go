@@ -27,7 +27,7 @@ func DefaultAuthConfig(secret string) AuthConfig {
 		HeaderName:   "Authorization",
 		TokenPrefix:  "Bearer ",
 		ContextKey:   "user",
-		SkipPrefixes: []string{"/health", "/ready", "/live", "/metrics"},
+		SkipPrefixes: []string{"/health", "/ready", "/live", "/metrics", "/swagger", "/circuit-breakers"},
 	}
 }
 
@@ -99,10 +99,16 @@ func Auth(cfg AuthConfig) fiber.Handler {
 		c.Locals("user_id", claims.UserID)
 		c.Locals("tenant_id", claims.TenantID)
 
-		// Add user info to headers for downstream services
-		c.Request().Header.Set("X-User-ID", claims.UserID)
-		c.Request().Header.Set("X-Tenant-ID", claims.TenantID)
-		c.Request().Header.Set("X-User-Email", claims.Email)
+		// Add user info to headers for downstream services (preserve client headers when JWT lacks values)
+		if claims.UserID != "" {
+			c.Request().Header.Set("X-User-ID", claims.UserID)
+		}
+		if claims.TenantID != "" {
+			c.Request().Header.Set("X-Tenant-ID", claims.TenantID)
+		}
+		if claims.Email != "" {
+			c.Request().Header.Set("X-User-Email", claims.Email)
+		}
 		if len(claims.Roles) > 0 {
 			c.Request().Header.Set("X-User-Roles", strings.Join(claims.Roles, ","))
 		}

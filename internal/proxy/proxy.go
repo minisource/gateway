@@ -28,40 +28,38 @@ type ServiceClient struct {
 	LastCheck  time.Time
 }
 
+func newServiceClient(name string, cfg config.ServiceConfig) *ServiceClient {
+	return &ServiceClient{
+		Name:       name,
+		URL:        cfg.URL,
+		HealthPath: cfg.HealthPath,
+		Healthy:    true,
+		Client: &fasthttp.Client{
+			MaxConnsPerHost:     cfg.MaxConnsPerHost,
+			MaxIdleConnDuration: 30 * time.Second,
+			ReadTimeout:         cfg.Timeout,
+			WriteTimeout:        cfg.Timeout,
+		},
+	}
+}
+
 // NewServiceProxy creates a new service proxy
 func NewServiceProxy(cfg *config.ServicesConfig) *ServiceProxy {
 	proxy := &ServiceProxy{
 		services: make(map[string]*ServiceClient),
 	}
-
-	// Initialize auth service
-	proxy.services["auth"] = &ServiceClient{
-		Name:       "auth",
-		URL:        cfg.Auth.URL,
-		HealthPath: cfg.Auth.HealthPath,
-		Healthy:    true,
-		Client: &fasthttp.Client{
-			MaxConnsPerHost:     cfg.Auth.MaxConnsPerHost,
-			MaxIdleConnDuration: 30 * time.Second,
-			ReadTimeout:         cfg.Auth.Timeout,
-			WriteTimeout:        cfg.Auth.Timeout,
-		},
+	for name, svc := range map[string]config.ServiceConfig{
+		"auth":      cfg.Auth,
+		"notifier":  cfg.Notifier,
+		"log":       cfg.Log,
+		"scheduler": cfg.Scheduler,
+		"storage":   cfg.Storage,
+		"comment":   cfg.Comment,
+		"ticket":    cfg.Ticket,
+		"feedback":  cfg.Feedback,
+	} {
+		proxy.services[name] = newServiceClient(name, svc)
 	}
-
-	// Initialize notifier service
-	proxy.services["notifier"] = &ServiceClient{
-		Name:       "notifier",
-		URL:        cfg.Notifier.URL,
-		HealthPath: cfg.Notifier.HealthPath,
-		Healthy:    true,
-		Client: &fasthttp.Client{
-			MaxConnsPerHost:     cfg.Notifier.MaxConnsPerHost,
-			MaxIdleConnDuration: 30 * time.Second,
-			ReadTimeout:         cfg.Notifier.Timeout,
-			WriteTimeout:        cfg.Notifier.Timeout,
-		},
-	}
-
 	return proxy
 }
 

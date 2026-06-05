@@ -5,7 +5,65 @@ info:
   description: API Gateway service for Minisource
   title: Gateway Service API
   version: "1.0"
-paths: {}
+paths:
+  /health:
+    get:
+      description: Returns gateway liveness status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Gateway health check
+      tags:
+      - Health
+  /health/services:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Downstream services health
+      tags:
+      - Health
+  /live:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Gateway liveness probe
+      tags:
+      - Health
+  /ready:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Gateway readiness check
+      tags:
+      - Health
 schemes:
 - http
 - https

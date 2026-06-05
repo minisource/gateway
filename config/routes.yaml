@@ -112,8 +112,79 @@ routes:
     circuitBreaker: true
 
   # ============================================
-  # Admin Routes
+  # Service-specific Admin Routes (before auth catch-all)
   # ============================================
+  - path: /api/v1/admin/agents
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/departments
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/sla-policies
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/canned-responses
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/dashboard
+    service: ticket
+    stripPrefix: false
+    methods: [GET]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/tickets
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/categories
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/stats
+    service: feedback
+    stripPrefix: false
+    methods: [GET]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/settings
+    service: feedback
+    stripPrefix: false
+    methods: [GET, PUT, POST]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/admin/feedback
+    service: feedback
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  # Auth admin catch-all (users, roles, permissions, service-clients)
   - path: /api/v1/admin
     service: auth
     stripPrefix: false
@@ -158,6 +229,150 @@ routes:
     service: notifier
     stripPrefix: false
     methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Scheduler Service Routes
+  # ============================================
+  - path: /api/v1/jobs
+    service: scheduler
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/executions
+    service: scheduler
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/history
+    service: scheduler
+    stripPrefix: false
+    methods: [GET]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Storage Service Routes
+  # ============================================
+  - path: /api/v1/files
+    service: storage
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/folders
+    service: storage
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/shares
+    service: storage
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/uploads
+    service: storage
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /share
+    service: storage
+    stripPrefix: false
+    methods: [GET]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Comment Service Routes
+  # ============================================
+  - path: /api/v1/comments
+    service: comment
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
+  # Ticket Service Routes (non-conflicting paths)
+  # ============================================
+  - path: /api/v1/tickets
+    service: ticket
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/departments
+    service: ticket
+    stripPrefix: false
+    methods: [GET]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Feedback Service Routes
+  # ============================================
+  - path: /api/v1/feedback
+    service: feedback
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/subscriptions
+    service: feedback
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/categories
+    service: feedback
+    stripPrefix: false
+    methods: [GET]
+    public: true
+    circuitBreaker: true
+
+  - path: /api/v1/settings
+    service: feedback
+    stripPrefix: false
+    methods: [GET]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Log Service Routes
+  # ============================================
+  - path: /api/v1/logs
+    service: log
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/retention
+    service: log
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE]
+    public: false
+    circuitBreaker: true
+
+  - path: /api/v1/alerts
+    service: log
+    stripPrefix: false
+    methods: [GET, POST, PUT, DELETE, PATCH]
     public: false
     circuitBreaker: true
 

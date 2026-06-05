@@ -136,13 +136,26 @@ make docker-down   # Stop containers
 
 ## Docker
 
-```bash
-# Build image
-docker build -t minisource/gateway .
+Images are published to [Docker Hub](https://hub.docker.com/orgs/minisource/repositories) on every successful build to `main`.
 
-# Run container
+| Image | Tags |
+|-------|------|
+| `minisource/gateway` | `latest`, commit SHA |
+
+```bash
+# Production (pre-built image)
+export TAG=latest
+docker compose -f docker-compose.prod.yml up -d
+
+# Local build
+docker build -t minisource/gateway .
 docker run -p 8080:8080 --env-file .env minisource/gateway
 ```
+
+### GitHub Actions secrets
+
+- `DOCKERHUB_USERNAME` — Docker Hub username
+- `DOCKERHUB_TOKEN` — Docker Hub access token
 
 ## Environment Files
 

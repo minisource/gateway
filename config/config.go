@@ -31,8 +31,14 @@ type ServerConfig struct {
 }
 
 type ServicesConfig struct {
-	Auth     ServiceConfig
-	Notifier ServiceConfig
+	Auth      ServiceConfig
+	Notifier  ServiceConfig
+	Log       ServiceConfig
+	Scheduler ServiceConfig
+	Storage   ServiceConfig
+	Comment   ServiceConfig
+	Ticket    ServiceConfig
+	Feedback  ServiceConfig
 }
 
 type ServiceConfig struct {
@@ -110,6 +116,48 @@ func Load() (*Config, error) {
 				MaxIdleConns:    getEnvInt("NOTIFIER_MAX_IDLE_CONNS", 100),
 				MaxConnsPerHost: getEnvInt("NOTIFIER_MAX_CONNS_PER_HOST", 100),
 				HealthPath:      getEnv("NOTIFIER_HEALTH_PATH", "/api/health"),
+			},
+			Log: ServiceConfig{
+				URL:             getEnv("LOG_SERVICE_URL", "http://localhost:5002"),
+				Timeout:         getDuration("LOG_SERVICE_TIMEOUT", 30*time.Second),
+				MaxIdleConns:    getEnvInt("LOG_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("LOG_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("LOG_HEALTH_PATH", "/health"),
+			},
+			Scheduler: ServiceConfig{
+				URL:             getEnv("SCHEDULER_SERVICE_URL", "http://localhost:5003"),
+				Timeout:         getDuration("SCHEDULER_SERVICE_TIMEOUT", 30*time.Second),
+				MaxIdleConns:    getEnvInt("SCHEDULER_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("SCHEDULER_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("SCHEDULER_HEALTH_PATH", "/health"),
+			},
+			Storage: ServiceConfig{
+				URL:             getEnv("STORAGE_SERVICE_URL", "http://localhost:5004"),
+				Timeout:         getDuration("STORAGE_SERVICE_TIMEOUT", 60*time.Second),
+				MaxIdleConns:    getEnvInt("STORAGE_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("STORAGE_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("STORAGE_HEALTH_PATH", "/health"),
+			},
+			Comment: ServiceConfig{
+				URL:             getEnv("COMMENT_SERVICE_URL", "http://localhost:5010"),
+				Timeout:         getDuration("COMMENT_SERVICE_TIMEOUT", 30*time.Second),
+				MaxIdleConns:    getEnvInt("COMMENT_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("COMMENT_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("COMMENT_HEALTH_PATH", "/health"),
+			},
+			Ticket: ServiceConfig{
+				URL:             getEnv("TICKET_SERVICE_URL", "http://localhost:5011"),
+				Timeout:         getDuration("TICKET_SERVICE_TIMEOUT", 30*time.Second),
+				MaxIdleConns:    getEnvInt("TICKET_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("TICKET_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("TICKET_HEALTH_PATH", "/health"),
+			},
+			Feedback: ServiceConfig{
+				URL:             getEnv("FEEDBACK_SERVICE_URL", "http://localhost:5012"),
+				Timeout:         getDuration("FEEDBACK_SERVICE_TIMEOUT", 30*time.Second),
+				MaxIdleConns:    getEnvInt("FEEDBACK_MAX_IDLE_CONNS", 100),
+				MaxConnsPerHost: getEnvInt("FEEDBACK_MAX_CONNS_PER_HOST", 100),
+				HealthPath:      getEnv("FEEDBACK_HEALTH_PATH", "/health"),
 			},
 		},
 		Redis: RedisConfig{

@@ -193,6 +193,31 @@ func DefaultRoutes() *RouteConfig {
 				Public:         false,
 				CircuitBreaker: true,
 			},
+			// Log service routes
+			{
+				Path:           "/api/v1/logs",
+				Service:        "log",
+				StripPrefix:    false,
+				Methods:        []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
+				Public:         false,
+				CircuitBreaker: true,
+			},
+			{
+				Path:           "/api/v1/retention",
+				Service:        "log",
+				StripPrefix:    false,
+				Methods:        []string{"GET", "POST", "PUT", "DELETE"},
+				Public:         false,
+				CircuitBreaker: true,
+			},
+			{
+				Path:           "/api/v1/alerts",
+				Service:        "log",
+				StripPrefix:    false,
+				Methods:        []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
+				Public:         false,
+				CircuitBreaker: true,
+			},
 			// Health endpoints (public)
 			{
 				Path:        "/health",

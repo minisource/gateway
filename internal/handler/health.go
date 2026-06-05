@@ -31,6 +31,13 @@ func (h *HealthHandler) RegisterRoutes(app *fiber.App) {
 }
 
 // Health returns overall gateway health
+//
+//	@Summary		Gateway health check
+//	@Description	Returns gateway liveness status
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Router			/health [get]
 func (h *HealthHandler) Health(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":    "healthy",
@@ -41,6 +48,13 @@ func (h *HealthHandler) Health(c *fiber.Ctx) error {
 }
 
 // Ready checks if gateway is ready to serve traffic
+//
+//	@Summary		Gateway readiness check
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Failure		503	{object}	map[string]interface{}
+//	@Router			/ready [get]
 func (h *HealthHandler) Ready(c *fiber.Ctx) error {
 	services := h.proxy.GetServicesHealth()
 	allHealthy := true
@@ -67,6 +81,12 @@ func (h *HealthHandler) Ready(c *fiber.Ctx) error {
 }
 
 // Live returns liveness status (for k8s liveness probe)
+//
+//	@Summary		Gateway liveness probe
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Router			/live [get]
 func (h *HealthHandler) Live(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":    "alive",
@@ -75,6 +95,12 @@ func (h *HealthHandler) Live(c *fiber.Ctx) error {
 }
 
 // ServicesHealth returns detailed health of all services
+//
+//	@Summary		Downstream services health
+//	@Tags			Health
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Router			/health/services [get]
 func (h *HealthHandler) ServicesHealth(c *fiber.Ctx) error {
 	services := h.proxy.GetServicesHealth()
 
