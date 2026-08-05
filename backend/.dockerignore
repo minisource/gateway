@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Binaries
+bin/
+*.exe
+*.exe~
+gateway.exe
+
+# Private Config Overlays & Environments
+*.local.yaml
+*.local.yml
+configs.local/
+config.local.yaml
+config.local.yml
+routes.local.yaml
+routes.local.yml
+.env
+.env.local
+
+# Logs & Temp
+*.log
+.vscode
+.idea
+
+# CI/CD
+.github

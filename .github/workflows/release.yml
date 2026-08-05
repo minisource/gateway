@@ -1,22 +1,16 @@
-name: CI
+name: Docker Release
 
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
-    tags: ["v*"]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
 
 jobs:
   backend:
-    name: Backend
+    name: Backend Validate
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,16 +24,6 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
-      - name: Check formatting
-        run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            gofmt -s -l .
-            exit 1
-          fi
-
-      - name: Verify modules
-        run: go mod verify
-
       - name: Vet
         run: go vet ./...
 
@@ -50,9 +34,9 @@ jobs:
         run: go build ./...
 
   docker:
-    name: Docker
+    name: Docker Publish
     needs: backend
-    uses: minisource/.github/.github/workflows/build-and-push.yml@main
+    uses: minisource/.github/.github/workflows/docker-release.yml@main
     with:
       image-name: ${{ secrets.DOCKERHUB_USERNAME }}/gateway
       dockerfile-path: backend/Dockerfile
