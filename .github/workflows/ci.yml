@@ -36,18 +36,28 @@ jobs:
             gofmt -s -l .
             exit 1
           fi
+        env:
+          GOFLAGS: -mod=mod
 
       - name: Verify modules
         run: go mod verify
+        env:
+          GOFLAGS: -mod=mod
 
       - name: Vet
         run: go vet ./...
+        env:
+          GOFLAGS: -mod=mod
 
       - name: Test
         run: go test -race -count=1 -timeout 300s ./...
+        env:
+          GOFLAGS: -mod=mod
 
       - name: Build
         run: go build ./...
+        env:
+          GOFLAGS: -mod=mod
 
   docker:
     name: Docker
