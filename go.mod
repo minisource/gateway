@@ -4,15 +4,13 @@ go 1.24.0
 
 toolchain go1.24.4
 
-replace github.com/minisource/go-common => ../go-common
-
 require (
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/swagger v1.1.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/minisource/go-common v0.0.0-20260206115146-9730b13a3cdf
+	github.com/minisource/go-common v0.1.2
 	github.com/prometheus/client_golang v1.22.0
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/sony/gobreaker v0.5.0
