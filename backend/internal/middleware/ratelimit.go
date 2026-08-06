@@ -181,6 +181,9 @@ func (ll *LocalLimiter) allow(key string, rps, burst int) (bool, int, int64) {
 
 // cleanup periodically removes old entries
 func (ll *LocalLimiter) cleanup(interval time.Duration) {
+	if interval <= 0 {
+		return // safety guard: skip cleanup if interval is not positive
+	}
 	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		ll.mu.Lock()

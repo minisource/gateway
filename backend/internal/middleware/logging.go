@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/minisource/gateway/config"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Logger interface for structured logging
@@ -100,6 +101,14 @@ func RequestLogger(logger Logger) fiber.Handler {
 		tenantID, _ := c.Locals("tenant_id").(string)
 		service, _ := c.Locals("service").(string)
 
+		// Get trace ID and span ID
+		var traceID, spanID string
+		span := trace.SpanFromContext(c.UserContext())
+		if span.SpanContext().HasTraceID() {
+			traceID = span.SpanContext().TraceID().String()
+			spanID = span.SpanContext().SpanID().String()
+		}
+
 		status := c.Response().StatusCode()
 
 		// Choose log level based on status
@@ -117,6 +126,8 @@ func RequestLogger(logger Logger) fiber.Handler {
 			"duration_ms", duration.Milliseconds(),
 			"ip", c.IP(),
 			"request_id", requestID,
+			"trace_id", traceID,
+			"span_id", spanID,
 			"user_id", userID,
 			"tenant_id", tenantID,
 			"service", service,

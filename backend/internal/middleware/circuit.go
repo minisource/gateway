@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/minisource/gateway/config"
+	"github.com/minisource/gateway/internal/respond"
 	"github.com/sony/gobreaker"
 )
 
@@ -125,20 +126,24 @@ func (m *CircuitBreakerManager) Middleware() fiber.Handler {
 		if err != nil {
 			// Circuit is open
 			if err == gobreaker.ErrOpenState {
-				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-					"error":   "service_unavailable",
-					"message": "Service temporarily unavailable, please try again later",
-					"service": serviceName,
-				})
+				return respond.WriteError(c, fiber.StatusServiceUnavailable, "service_unavailable",
+					"Service temporarily unavailable, please try again later",
+					fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Service temporarily unavailable, please try again later",
+						"service": serviceName,
+					})
 			}
 
 			// Circuit is half-open but request failed
 			if err == gobreaker.ErrTooManyRequests {
-				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-					"error":   "too_many_requests",
-					"message": "Service is recovering, please try again",
-					"service": serviceName,
-				})
+				return respond.WriteError(c, fiber.StatusServiceUnavailable, "too_many_requests",
+					"Service is recovering, please try again",
+					fiber.Map{
+						"error":   "too_many_requests",
+						"message": "Service is recovering, please try again",
+						"service": serviceName,
+					})
 			}
 
 			// Other errors - response may already be set by c.Next()

@@ -187,7 +187,7 @@ func Load() (*Config, error) {
 		Tracing: TracingConfig{
 			Enabled:     getEnvBool("TRACING_ENABLED", true),
 			ServiceName: getEnv("SERVICE_NAME", "minisource-gateway"),
-			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
 			SampleRate:  getEnvFloat("TRACING_SAMPLE_RATE", 1.0),
 		},
 		Logging: LoggingConfig{

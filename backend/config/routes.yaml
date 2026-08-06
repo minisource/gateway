@@ -85,6 +85,50 @@ routes:
     circuitBreaker: true
 
   # ============================================
+  # Google OAuth Routes (Public)
+  # ============================================
+  - path: /api/v1/auth/google
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST]
+    public: true
+    circuitBreaker: true
+
+  - path: /api/v1/auth/introspect
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Token Validation & Service Auth Routes
+  # ============================================
+  - path: /api/v1/tokens
+    service: auth
+    stripPrefix: false
+    methods: [GET]
+    public: true
+    circuitBreaker: true
+
+  - path: /api/v1/service
+    service: auth
+    stripPrefix: false
+    methods: [GET, POST]
+    public: true
+    circuitBreaker: true
+
+  # ============================================
+  # Account Management Routes (Protected)
+  # ============================================
+  - path: /api/v1/account
+    service: auth
+    stripPrefix: false
+    methods: [POST]
+    public: false
+    circuitBreaker: true
+
+  # ============================================
   # User Management Routes
   # ============================================
   - path: /api/v1/users

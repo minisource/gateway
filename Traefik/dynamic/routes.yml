@@ -1,0 +1,203 @@
+# =============================================================================
+# Traefik — Dynamic Routing (Hot-reload بدون ری‌استارت)
+# =============================================================================
+# Architecture:
+#   Frontend → Gateway (:9000) → Backend services
+#   Backend-to-backend: Direct (host.docker.internal:PORT)
+#   Bank callbacks: Gateway → Payment (public, no auth)
+#
+# Services:
+#   auth      → :9001
+#   payment   → :5010
+#   notifier  → :9002
+#   storage   → :5030
+#
+# Production hosts:
+#   api.payment.com, api.storage.com
+# =============================================================================
+
+http:
+
+  # ─── Middlewares ───────────────────────────────────────────────────────────
+  middlewares:
+    cors:
+      headers:
+        accessControlAllowOriginList:
+          - "http://localhost:3003"
+          - "http://localhost:5173"
+          - "http://127.0.0.1:3003"
+          - "http://127.0.0.1:5173"
+        accessControlAllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "PATCH"
+          - "DELETE"
+          - "OPTIONS"
+        accessControlAllowHeaders:
+          - "Authorization"
+          - "Content-Type"
+          - "X-Request-ID"
+          - "X-Correlation-Id"
+          - "X-Tenant-Id"
+          - "X-Application-Code"
+          - "X-Language"
+          - "Accept-Language"
+          - "Idempotency-Key"
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 600
+        addVaryHeader: true
+
+  # ─── Upstream Services ─────────────────────────────────────────────────────
+  services:
+    auth:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://host.docker.internal:9001"
+
+    payment:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://host.docker.internal:5010"
+
+    storage:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://host.docker.internal:5030"
+
+  # ─── Routers ───────────────────────────────────────────────────────────────
+  routers:
+
+    # ═══════════════════════════════════════════════════════════════════
+    # PUBLIC ENDPOINTS (no auth required at gateway level)
+    # ═══════════════════════════════════════════════════════════════════
+
+    # Payment public config (tenant/currency list for frontend)
+    dev-public-config:
+      rule: "PathPrefix(`/v1/system`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 55
+
+    # Payment result page
+    dev-payment-result:
+      rule: "PathPrefix(`/result`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 55
+
+    # Payment callbacks (bank gateway callbacks — MUST be public, no auth)
+    dev-payment-callbacks:
+      rule: "PathPrefix(`/api/v1/gateway-callbacks`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 55
+
+    # Health endpoints
+    dev-health:
+      rule: "PathPrefix(`/health`) || PathPrefix(`/ready`) || PathPrefix(`/live`) || Path(`/metrics`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 60
+
+    # Swagger
+    dev-swagger:
+      rule: "PathPrefix(`/swagger`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 55
+
+    # Auth JWKS
+    dev-wellknown:
+      rule: "PathPrefix(`/.well-known`)"
+      entryPoints: [web]
+      service: auth
+      middlewares: [cors]
+      priority: 100
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Payment Service — API routes (api/v1 prefix)
+    # Priority 50
+    # ═══════════════════════════════════════════════════════════════════
+
+    dev-payment-api:
+      rule: "PathPrefix(`/api/v1`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 50
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Auth routes — /v1/auth
+    # ═══════════════════════════════════════════════════════════════════
+
+    dev-auth:
+      rule: "PathPrefix(`/v1/auth`)"
+      entryPoints: [web]
+      service: auth
+      middlewares: [cors]
+      priority: 100
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Storage Service — API routes (api/v1 prefix)
+    # Priority 52 so it's tried before payment /api/v1 catch-all (50)
+    # but after callbacks/public config (55+)
+    # ═══════════════════════════════════════════════════════════════════
+
+    dev-storage-api:
+      rule: "PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/folders`) || PathPrefix(`/api/v1/shares`) || PathPrefix(`/api/v1/uploads`) || PathPrefix(`/api/v1/settings`)"
+      entryPoints: [web]
+      service: storage
+      middlewares: [cors]
+      priority: 52
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Production — api.payment.com (NEW)
+    # ═══════════════════════════════════════════════════════════════════
+
+    payment-com-api:
+      rule: "Host(`api.payment.com`) && PathPrefix(`/api/v1`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 150
+
+    payment-com-public:
+      rule: "Host(`api.payment.com`) && (PathPrefix(`/v1/system`) || PathPrefix(`/result`) || PathPrefix(`/health`) || PathPrefix(`/ready`) || PathPrefix(`/live`) || Path(`/metrics`) || PathPrefix(`/swagger`))"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 200
+
+    payment-com-callbacks:
+      rule: "Host(`api.payment.com`) && PathPrefix(`/api/v1/gateway-callbacks`)"
+      entryPoints: [web]
+      service: payment
+      middlewares: [cors]
+      priority: 210
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Production — api.storage.com (Storage service)
+    # ═══════════════════════════════════════════════════════════════════
+
+    storage-com-api:
+      rule: "Host(`api.storage.com`) && (PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/folders`) || PathPrefix(`/api/v1/shares`) || PathPrefix(`/api/v1/uploads`) || PathPrefix(`/api/v1/settings`))"
+      entryPoints: [web]
+      service: storage
+      middlewares: [cors]
+      priority: 150
+
+    storage-com-health:
+      rule: "Host(`api.storage.com`) && (PathPrefix(`/health`) || PathPrefix(`/ready`) || PathPrefix(`/live`) || PathPrefix(`/swagger`))"
+      entryPoints: [web]
+      service: storage
+      middlewares: [cors]
+      priority: 200

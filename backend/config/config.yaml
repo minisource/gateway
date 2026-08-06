@@ -1,0 +1,567 @@
+# =============================================================================
+# MiniSource Gateway — Docker Compose Config (Production-like)
+# =============================================================================
+# All traffic flows through the gateway on port 8080.
+# Backend and frontend services are internal-only.
+#
+# Endpoints:
+#   Auth Frontend:     http://localhost:8080/auth/* (login, register, dashboard, admin, profile)
+#   Notifier Frontend: http://localhost:8080/notifier/*
+#   Auth API:          http://localhost:8080/v1/auth/*, /v1/users/*
+#   Notifier API:      http://localhost:8080/v1/notifications/*, /v1/templates/*, etc.
+#   Swagger:           http://localhost:8080/swagger/index.html
+#   Health:            http://localhost:8080/health
+# =============================================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  readTimeout: "15s"
+  writeTimeout: "30s"
+  idleTimeout: "60s"
+  shutdownTimeout: "30s"
+  trustedProxies:
+    - "127.0.0.1"
+  maxBodyBytes: 104857600  # 100MB
+
+app:
+  name: "minisource-gateway"
+  env: "development"
+  logLevel: "debug"
+  logFormat: "console"
+
+cors:
+  enabled: true
+  allowedOrigins:
+    - "http://localhost:8080"
+    - "http://127.0.0.1:8080"
+    - "*"
+  allowedMethods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "PATCH"
+    - "DELETE"
+    - "OPTIONS"
+  allowedHeaders:
+    - "Authorization"
+    - "Content-Type"
+    - "X-Request-ID"
+    - "X-Request-Id"
+    - "X-Correlation-Id"
+    - "X-Tenant-Id"
+    - "X-Tenant-ID"
+    - "X-Application-Code"
+    - "X-Language"
+    - "Accept-Language"
+    - "Idempotency-Key"
+  allowCredentials: true
+
+auth:
+  enabled: true
+  validateAtGateway: false
+
+rateLimit:
+  enabled: false
+
+routing:
+  allowDevHostFallback: true
+
+# ─── Upstream Services ───────────────────────────────────
+services:
+  auth:
+    baseUrl: "http://auth-backend:9001"
+    timeout: "30s"
+    healthPath: "/health"
+    public: true
+
+  auth-frontend:
+    baseUrl: "http://minisource-auth-frontend:3003"
+    timeout: "30s"
+    healthPath: "/auth/login"
+    public: true
+
+  notifier:
+    baseUrl: "http://notifier-backend:9002"
+    timeout: "30s"
+    healthPath: "/health"
+    public: false
+    internalOnly: true
+
+  notifier-frontend:
+    baseUrl: "http://minisource-notifier-frontend:3004"
+    timeout: "30s"
+    healthPath: "/notifier/dashboard"
+    public: true
+
+  log:
+    baseUrl: "http://127.0.0.1:5002"
+    timeout: "30s"
+    healthPath: "/health"
+
+  scheduler:
+    baseUrl: "http://127.0.0.1:5003"
+    timeout: "30s"
+    healthPath: "/health"
+
+  storage:
+    baseUrl: "http://127.0.0.1:5004"
+    timeout: "60s"
+    healthPath: "/health"
+
+  comment:
+    baseUrl: "http://127.0.0.1:5010"
+    timeout: "30s"
+    healthPath: "/health"
+
+  ticket:
+    baseUrl: "http://127.0.0.1:5011"
+    timeout: "30s"
+    healthPath: "/health"
+
+  feedback:
+    baseUrl: "http://127.0.0.1:5012"
+    timeout: "30s"
+    healthPath: "/health"
+
+# ─── Routes ──────────────────────────────────────────────
+hosts:
+  - host: "localhost"
+    routes:
+      # ═══════════════════════════════════════════════════════════
+      # AUTH API ROUTES (Backend)
+      # ═══════════════════════════════════════════════════════════
+
+      # Public auth endpoints
+      - id: "auth-login"
+        pathPrefix: "/v1/auth/login"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/login"
+        policy: "public"
+        methods: ["POST", "GET"]
+
+      - id: "auth-register"
+        pathPrefix: "/v1/auth/register"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/register"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-refresh"
+        pathPrefix: "/v1/auth/refresh"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/refresh"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-otp-send"
+        pathPrefix: "/v1/auth/otp/send"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/otp/send"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-otp-verify"
+        pathPrefix: "/v1/auth/otp/verify"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/otp/verify"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-resend-verification"
+        pathPrefix: "/v1/auth/resend-verification"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/resend-verification"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-verify-email"
+        pathPrefix: "/v1/auth/verify-email"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/verify-email"
+        policy: "public"
+        methods: ["POST", "GET"]
+
+      - id: "auth-forgot-password"
+        pathPrefix: "/v1/auth/forgot-password"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/forgot-password"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-reset-password"
+        pathPrefix: "/v1/auth/reset-password"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/reset-password"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "jwks"
+        pathPrefix: "/.well-known"
+        upstream: "auth"
+        upstreamPathPrefix: "/.well-known"
+        policy: "public"
+        methods: ["GET"]
+
+      # Authenticated auth endpoints
+      - id: "auth-userinfo"
+        pathPrefix: "/v1/auth/userinfo"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/userinfo"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      - id: "auth-logout"
+        pathPrefix: "/v1/auth/logout"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/logout"
+        policy: "authenticated"
+        methods: ["POST"]
+
+      - id: "auth-google"
+        pathPrefix: "/v1/auth/google"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/google"
+        policy: "public"
+        methods: ["GET", "POST"]
+
+      - id: "auth-introspect"
+        pathPrefix: "/v1/auth/introspect"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/introspect"
+        policy: "public"
+        methods: ["POST"]
+
+      # Two-factor challenge completion — must be public (no session yet)
+      - id: "auth-verify-2fa"
+        pathPrefix: "/v1/auth/verify-2fa"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/verify-2fa"
+        policy: "public"
+        methods: ["POST"]
+
+      # Passkey (WebAuthn) login ceremony — must be public (no session yet)
+      - id: "auth-webauthn"
+        pathPrefix: "/v1/auth/webauthn"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/webauthn"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-other"
+        pathPrefix: "/v1/auth"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      # ═══════════════════════════════════════════════════════════
+      # AUTH SERVICE — Users, Tokens, Service, Account
+      # ═══════════════════════════════════════════════════════════
+      - id: "users"
+        pathPrefix: "/v1/users"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/users"
+        policy: "authenticated"
+        methods: ["GET", "PUT", "PATCH", "POST", "DELETE"]
+
+      # Notifier admin routes (must be before auth-admin catch-all)
+      - id: "notifier-admin-notifications"
+        pathPrefix: "/v1/admin/notifications"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/notifications"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-templates"
+        pathPrefix: "/v1/admin/templates"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/templates"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-providers"
+        pathPrefix: "/v1/admin/providers"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/providers"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-deliveries"
+        pathPrefix: "/v1/admin/deliveries"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/deliveries"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-reminders"
+        pathPrefix: "/v1/admin/reminders"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/reminders"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-preferences"
+        pathPrefix: "/v1/admin/preferences"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/preferences"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-admin-observability"
+        pathPrefix: "/v1/admin/observability"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/observability"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      - id: "notifier-admin-attempts"
+        pathPrefix: "/v1/admin/attempts"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/attempts"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      - id: "notifier-admin-delivery-control"
+        pathPrefix: "/v1/admin/delivery-control"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/admin/delivery-control"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-admin"
+        pathPrefix: "/v1/admin"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/admin"
+        policy: "authenticated"
+        methods: ["GET", "PUT", "PATCH", "POST", "DELETE"]
+
+      - id: "auth-tokens"
+        pathPrefix: "/v1/tokens"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/tokens"
+        policy: "public"
+        methods: ["GET"]
+
+      - id: "auth-service-auth"
+        pathPrefix: "/v1/service"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/service"
+        policy: "public"
+        methods: ["GET", "POST"]
+
+      - id: "auth-account"
+        pathPrefix: "/v1/account"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/account"
+        policy: "authenticated"
+        methods: ["POST"]
+
+      - id: "auth-roles"
+        pathPrefix: "/v1/roles"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/roles"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-permissions"
+        pathPrefix: "/v1/permissions"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/permissions"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-tenants"
+        pathPrefix: "/v1/tenants"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/tenants"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-sessions"
+        pathPrefix: "/v1/sessions"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/sessions"
+        policy: "authenticated"
+        methods: ["GET", "POST", "DELETE"]
+
+      - id: "auth-settings"
+        pathPrefix: "/v1/settings"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/settings"
+        policy: "authenticated"
+        methods: ["GET", "PUT", "PATCH"]
+
+      - id: "auth-oauth-providers"
+        pathPrefix: "/v1/oauth-providers"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/oauth-providers"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-service-clients"
+        pathPrefix: "/v1/service-clients"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/service-clients"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "auth-login-logs"
+        pathPrefix: "/v1/login-logs"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/login-logs"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      # Auth backend swagger
+      - id: "auth-swagger"
+        pathPrefix: "/v1/auth-swagger"
+        upstream: "auth"
+        stripPrefix: "/v1/auth-swagger"
+        upstreamPathPrefix: "/swagger"
+        policy: "public"
+        methods: ["GET"]
+
+      # ═══════════════════════════════════════════════════════════
+      # NOTIFIER API ROUTES (Backend) — Auth enforced at gateway
+      # ═══════════════════════════════════════════════════════════
+
+      # User-specific notifier endpoints (must be before generic notifications)
+      - id: "notifier-me"
+        pathPrefix: "/v1/me/notifications"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/me/notifications"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-notifications"
+        pathPrefix: "/v1/notifications"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/notifications"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-templates"
+        pathPrefix: "/v1/templates"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/templates"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-preferences"
+        pathPrefix: "/v1/preferences"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/preferences"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-reminders"
+        pathPrefix: "/v1/reminders"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/reminders"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-deliveries"
+        pathPrefix: "/v1/deliveries"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/deliveries"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-providers"
+        pathPrefix: "/v1/providers"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/providers"
+        policy: "admin"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "notifier-observability"
+        pathPrefix: "/v1/observability"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1/observability"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      - id: "notifier-catchall"
+        pathPrefix: "/v1/notifier"
+        upstream: "notifier"
+        upstreamPathPrefix: "/v1"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      # Notifier backend swagger
+      - id: "notifier-swagger"
+        pathPrefix: "/v1/notifier-swagger"
+        upstream: "notifier"
+        stripPrefix: "/v1/notifier-swagger"
+        upstreamPathPrefix: "/swagger"
+        policy: "public"
+        methods: ["GET"]
+
+      # ═══════════════════════════════════════════════════════════
+      # STORAGE SERVICE
+      # ═══════════════════════════════════════════════════════════
+      - id: "storage"
+        pathPrefix: "/v1/storage"
+        upstream: "storage"
+        stripPrefix: "/v1/storage"
+        upstreamPathPrefix: "/api/v1"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+      - id: "storage-share-public"
+        pathPrefix: "/share"
+        upstream: "storage"
+        upstreamPathPrefix: "/share"
+        policy: "public"
+        methods: ["GET"]
+
+      # ═══════════════════════════════════════════════════════════
+      # AUTH FRONTEND (Next.js) — Served via gateway at /auth
+      # (mirrors notifier frontend pattern: basePath '/notifier')
+      # ═══════════════════════════════════════════════════════════
+
+      # Next.js static assets (must be before page routes)
+      - id: "auth-front-next-static"
+        pathPrefix: "/auth/_next"
+        upstream: "auth-frontend"
+        upstreamPathPrefix: "/auth/_next"
+        policy: "public"
+        methods: ["GET"]
+
+      # Auth frontend API routes (health, api-lab, etc.)
+      - id: "auth-front-api"
+        pathPrefix: "/auth/api"
+        upstream: "auth-frontend"
+        upstreamPathPrefix: "/auth/api"
+        policy: "public"
+        methods: ["GET", "POST"]
+
+      # Auth frontend pages (all under /auth)
+      - id: "auth-front-pages"
+        pathPrefix: "/auth"
+        upstream: "auth-frontend"
+        upstreamPathPrefix: "/auth"
+        policy: "public"
+        methods: ["GET", "POST"]
+
+      # ═══════════════════════════════════════════════════════════
+      # NOTIFIER FRONTEND (Next.js) — Served via gateway at /notifier
+      # ═══════════════════════════════════════════════════════════
+
+      # Notifier frontend static assets
+      - id: "notifier-front-next-static"
+        pathPrefix: "/notifier/_next"
+        upstream: "notifier-frontend"
+        upstreamPathPrefix: "/notifier/_next"
+        policy: "public"
+        methods: ["GET"]
+
+      # Notifier frontend pages (all under /notifier/)
+      - id: "notifier-front-pages"
+        pathPrefix: "/notifier"
+        upstream: "notifier-frontend"
+        upstreamPathPrefix: "/notifier"
+        policy: "public"
+        methods: ["GET", "POST"]

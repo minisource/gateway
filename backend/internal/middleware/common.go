@@ -29,11 +29,20 @@ func SecurityHeaders() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Security headers
 		c.Set("X-Content-Type-Options", "nosniff")
-		c.Set("X-Frame-Options", "DENY")
+		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("X-XSS-Protection", "1; mode=block")
 		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		c.Set("Content-Security-Policy", "default-src 'self'")
 		c.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		// Content Security Policy supporting Next.js SSR, hydration scripts, inline styles & fonts
+		c.Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"font-src 'self' data: https://fonts.gstatic.com; "+
+				"img-src 'self' data: blob: https:; "+
+				"connect-src 'self' http: https: ws: wss:;")
 
 		// Remove server information
 		c.Set("Server", "")
@@ -44,25 +53,22 @@ func SecurityHeaders() fiber.Handler {
 
 // CORS handles Cross-Origin Resource Sharing
 func CORS(allowedOrigins []string) fiber.Handler {
-	originsMap := make(map[string]bool)
-	for _, origin := range allowedOrigins {
-		originsMap[origin] = true
-	}
-
 	return func(c *fiber.Ctx) error {
 		origin := c.Get("Origin")
 
-		// Check if origin is allowed
-		if origin != "" && (len(allowedOrigins) == 0 || originsMap[origin] || originsMap["*"]) {
+		if origin != "" {
 			c.Set("Access-Control-Allow-Origin", origin)
 			c.Set("Access-Control-Allow-Credentials", "true")
+		} else {
+			c.Set("Access-Control-Allow-Origin", "*")
 		}
 
 		// Handle preflight requests
 		if c.Method() == "OPTIONS" {
 			c.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Tenant-ID")
-			c.Set("Access-Control-Max-Age", "86400") // 24 hours
+			c.Set("Access-Control-Allow-Headers", "*")
+			c.Set("Access-Control-Expose-Headers", "*")
+			c.Set("Access-Control-Max-Age", "86400")
 			return c.SendStatus(fiber.StatusNoContent)
 		}
 

@@ -1,0 +1,25 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Config Overlays & Private Files
+*.local.yaml
+*.local.yml
+configs.local/
+config.local.yaml
+config.local.yml
+routes.local.yaml
+routes.local.yml
+
+# Environment & Logs
+.env
+.env.local
+*.log
+
+# Test coverage
+coverage.txt
+coverage.out

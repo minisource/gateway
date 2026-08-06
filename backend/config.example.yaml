@@ -1,0 +1,181 @@
+# MiniSource Gateway Configuration
+# Copy this file to backend/config/config.yaml and customize for your environment.
+# WARNING: config.yaml is .gitignored. Never commit real configs.
+
+server:
+  host: "0.0.0.0"
+  port: 9000
+  readTimeout: "15s"
+  writeTimeout: "30s"
+  idleTimeout: "60s"
+  shutdownTimeout: "30s"
+  trustedProxies:
+    - "127.0.0.1"
+  maxBodyBytes: 10485760  # 10MB
+
+app:
+  name: "minisource-gateway"
+  env: "development"      # development | staging | production
+  logLevel: "debug"
+  logFormat: "console"    # console | json
+
+cors:
+  enabled: true
+  allowedOrigins:
+    - "http://localhost:3003"
+    - "http://localhost:5173"
+    - "http://127.0.0.1:3003"
+  allowedMethods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "PATCH"
+    - "DELETE"
+    - "OPTIONS"
+  allowedHeaders:
+    - "Authorization"
+    - "Content-Type"
+    - "X-Request-ID"
+  allowCredentials: true
+
+auth:
+  enabled: true
+  # Explicit auth mode: jwks | hmac | disabled
+  # No automatic fallback between modes.
+  mode: "jwks"                   # REQUIRED when validateAtGateway=true
+  jwksUrl: "http://127.0.0.1:9001/.well-known/jwks.json"
+  issuer: "minisource-auth"
+  audience: "minisource"
+  validateAtGateway: true
+  # secret: ""                   # Only used when mode=hmac
+  # allowLegacyHMAC: false       # Explicit opt-in for HMAC fallback (production requires explicit true)
+
+rateLimit:
+  enabled: true
+  requestsPerMinute: 120
+  burst: 60
+
+# Host fallback behavior — production must be false
+routing:
+  allowDevHostFallback: true     # In development, unknown hosts fall back to "localhost" routes
+
+# Upstream service definitions
+services:
+  auth:
+    baseUrl: "http://127.0.0.1:9001"
+    timeout: "30s"
+    healthPath: "/health"
+    public: true
+
+  notifier:
+    baseUrl: "http://127.0.0.1:9002"
+    timeout: "30s"
+    healthPath: "/health"
+    public: false
+    internalOnly: true
+
+  # Legacy/existing services
+  log:
+    baseUrl: "http://127.0.0.1:5002"
+    timeout: "30s"
+    healthPath: "/health"
+
+  scheduler:
+    baseUrl: "http://127.0.0.1:5003"
+    timeout: "30s"
+    healthPath: "/health"
+
+  storage:
+    baseUrl: "http://127.0.0.1:5004"
+    timeout: "60s"
+    healthPath: "/health"
+
+  comment:
+    baseUrl: "http://127.0.0.1:5010"
+    timeout: "30s"
+    healthPath: "/health"
+
+  ticket:
+    baseUrl: "http://127.0.0.1:5011"
+    timeout: "30s"
+    healthPath: "/health"
+
+  feedback:
+    baseUrl: "http://127.0.0.1:5012"
+    timeout: "30s"
+    healthPath: "/health"
+
+# Multi-domain / multi-host routing
+hosts:
+  # Default host (localhost / development)
+  - host: "localhost"
+    routes:
+      # Auth — granular routes by policy
+      # Login/register/refresh: public
+      - id: "auth-login"
+        pathPrefix: "/v1/auth/login"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/login"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-register"
+        pathPrefix: "/v1/auth/register"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/register"
+        policy: "public"
+        methods: ["POST"]
+
+      - id: "auth-refresh"
+        pathPrefix: "/v1/auth/refresh"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/refresh"
+        policy: "public"
+        methods: ["POST"]
+
+      # JWKS: public
+      - id: "jwks"
+        pathPrefix: "/.well-known"
+        upstream: "auth"
+        upstreamPathPrefix: "/.well-known"
+        policy: "public"
+        methods: ["GET"]
+
+      # Two-factor challenge completion — must be public (no session yet)
+      - id: "auth-verify-2fa"
+        pathPrefix: "/v1/auth/verify-2fa"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/verify-2fa"
+        policy: "public"
+        methods: ["POST"]
+
+      # Passkey (WebAuthn) login ceremony — must be public (no session yet)
+      - id: "auth-webauthn"
+        pathPrefix: "/v1/auth/webauthn"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/webauthn"
+        policy: "public"
+        methods: ["POST"]
+
+      # Auth userinfo/logout: authenticated
+      - id: "auth-userinfo"
+        pathPrefix: "/v1/auth/userinfo"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/userinfo"
+        policy: "authenticated"
+        methods: ["GET"]
+
+      - id: "auth-logout"
+        pathPrefix: "/v1/auth/logout"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth/logout"
+        policy: "authenticated"
+        methods: ["POST"]
+
+      # Auth catch-all (for other auth paths not explicitly listed)
+      - id: "auth-other"
+        pathPrefix: "/v1/auth"
+        upstream: "auth"
+        upstreamPathPrefix: "/v1/auth"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]

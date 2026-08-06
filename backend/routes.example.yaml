@@ -1,0 +1,325 @@
+# =============================================================================
+# MiniSource Gateway — Route Configuration (v2)
+# =============================================================================
+#
+# This file defines all public API routes for the MiniSource Gateway.
+# Routes are organized per host (domain) and support the following policies:
+#
+#   public          No authentication required
+#   authenticated   Valid JWT required (gateway pre-check + upstream validation)
+#   admin           Valid JWT + admin/super_admin role required
+#   internal        Only accessible from within the internal network
+#   disabled        Completely blocked (returns 404)
+#
+# ARCHITECTURE:
+#   Internet → Gateway (this config) → internal services
+#   Gateway validates JWT claims (issuer, expiry, kid) as a pre-check.
+#   Upstream services MUST perform full cryptographic JWT verification.
+#
+# ROUTE MATCHING:
+#   - Longer path prefixes win (e.g. /v1/auth/login before /v1/auth)
+#   - Host header determines which route table is used
+#   - Unknown hosts in production return 404
+#   - Unknown hosts in development fall back to "localhost" routes (if enabled)
+#
+# Copy this file to: backend/routes.yaml (or merge into config.yaml)
+# WARNING: routes.yaml is .gitignored. Never commit real route configs.
+# =============================================================================
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Host: localhost (development default)
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# In development, all requests without a specific domain header match here.
+# Production domains (e.g. api.example-service.invalid) have separate route tables.
+#
+- host: localhost
+  routes:
+
+    # ── Auth ───────────────────────────────────────────────────────────────
+
+    - id: auth-login
+      pathPrefix: /v1/auth/login
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/login
+      policy: public
+      methods: [POST]
+
+    - id: auth-register
+      pathPrefix: /v1/auth/register
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/register
+      policy: public
+      methods: [POST]
+
+    - id: auth-refresh
+      pathPrefix: /v1/auth/refresh
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/refresh
+      policy: public
+      methods: [POST]
+
+    - id: auth-verify-email
+      pathPrefix: /v1/auth/verify-email
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/verify-email
+      policy: public
+      methods: [POST, GET]
+
+    - id: auth-forgot-password
+      pathPrefix: /v1/auth/forgot-password
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/forgot-password
+      policy: public
+      methods: [POST]
+
+    - id: auth-reset-password
+      pathPrefix: /v1/auth/reset-password
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/reset-password
+      policy: public
+      methods: [POST]
+
+    - id: jwks
+      pathPrefix: /.well-known
+      upstream: auth
+      upstreamPathPrefix: /.well-known
+      policy: public
+      methods: [GET]
+
+    - id: auth-userinfo
+      pathPrefix: /v1/auth/userinfo
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/userinfo
+      policy: authenticated
+      methods: [GET]
+
+    - id: auth-logout
+      pathPrefix: /v1/auth/logout
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/logout
+      policy: authenticated
+      methods: [POST]
+
+    # Google OAuth (public — must be before auth catch-all)
+    - id: auth-google
+      pathPrefix: /v1/auth/google
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/google
+      policy: public
+      methods: [GET, POST]
+
+    # Token introspection (public)
+    - id: auth-introspect
+      pathPrefix: /v1/auth/introspect
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/introspect
+      policy: public
+      methods: [POST]
+
+    # Auth management (users, roles, permissions) — admin only
+    - id: auth-users
+      pathPrefix: /v1/auth/users
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/users
+      policy: admin
+      methods: [GET, POST, PUT, PATCH, DELETE]
+
+    - id: auth-roles
+      pathPrefix: /v1/auth/roles
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/roles
+      policy: admin
+      methods: [GET, POST, PUT, DELETE]
+
+    - id: auth-permissions
+      pathPrefix: /v1/auth/permissions
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/permissions
+      policy: admin
+      methods: [GET, POST, PUT, DELETE]
+
+    # Auth catch-all (for any other /v1/auth paths)
+    - id: auth-other
+      pathPrefix: /v1/auth
+      upstream: auth
+      upstreamPathPrefix: /v1/auth
+      policy: authenticated
+      methods: [GET, POST, PUT, PATCH, DELETE]
+
+    # ── Auth Service-to-Service & Account ─────────────────────────────────
+
+    # Token validation (used by other microservices)
+    - id: auth-tokens
+      pathPrefix: /v1/tokens
+      upstream: auth
+      upstreamPathPrefix: /v1/tokens
+      policy: public
+      methods: [GET]
+
+    # Service authentication (service-to-service)
+    - id: auth-service-auth
+      pathPrefix: /v1/service
+      upstream: auth
+      upstreamPathPrefix: /v1/service
+      policy: public
+      methods: [GET, POST]
+
+    # Account management (phone verification, etc.)
+    - id: auth-account
+      pathPrefix: /v1/account
+      upstream: auth
+      upstreamPathPrefix: /v1/account
+      policy: authenticated
+      methods: [POST]
+
+    # ── Comment ────────────────────────────────────────────────────────────
+
+    - id: comment
+      pathPrefix: /v1/comment
+      upstream: comment
+      stripPrefix: /v1/comment
+      upstreamPathPrefix: /v1
+      policy: authenticated
+      methods: [GET, POST, PUT, DELETE]
+
+    # ── Ticket ─────────────────────────────────────────────────────────────
+
+    - id: ticket
+      pathPrefix: /v1/ticket
+      upstream: ticket
+      stripPrefix: /v1/ticket
+      upstreamPathPrefix: /v1
+      policy: authenticated
+      methods: [GET, POST, PUT, PATCH, DELETE]
+
+    # ── Feedback ───────────────────────────────────────────────────────────
+
+    - id: feedback
+      pathPrefix: /v1/feedback
+      upstream: feedback
+      stripPrefix: /v1/feedback
+      upstreamPathPrefix: /v1
+      policy: authenticated
+      methods: [GET, POST, PUT, DELETE]
+
+    # ── Storage ────────────────────────────────────────────────────────────
+
+    - id: storage
+      pathPrefix: /v1/storage
+      upstream: storage
+      stripPrefix: /v1/storage
+      upstreamPathPrefix: /v1
+      policy: authenticated
+      methods: [GET, POST, PUT, PATCH, DELETE]
+
+    # ── Log (admin only) ───────────────────────────────────────────────────
+
+    - id: logs
+      pathPrefix: /v1/logs
+      upstream: log
+      stripPrefix: /v1/logs
+      upstreamPathPrefix: /v1
+      policy: admin
+      methods: [GET]
+
+    - id: retention
+      pathPrefix: /v1/retention
+      upstream: log
+      stripPrefix: /v1/retention
+      upstreamPathPrefix: /v1
+      policy: admin
+      methods: [GET, POST, PUT, DELETE]
+
+    - id: alerts
+      pathPrefix: /v1/alerts
+      upstream: log
+      stripPrefix: /v1/alerts
+      upstreamPathPrefix: /v1
+      policy: admin
+      methods: [GET, POST, PUT, DELETE]
+
+    # ── Scheduler (admin only) ─────────────────────────────────────────────
+
+    - id: scheduler
+      pathPrefix: /v1/scheduler
+      upstream: scheduler
+      stripPrefix: /v1/scheduler
+      upstreamPathPrefix: /v1
+      policy: admin
+      methods: [GET, POST, PUT, DELETE]
+
+    # ── Notifier (internal/admin — no public routes) ───────────────────────
+    #
+    # Notifier is internal-only by default. Uncomment for admin access:
+    #
+    # - id: notifier
+    #   pathPrefix: /v1/notifier
+    #   upstream: notifier
+    #   stripPrefix: /v1/notifier
+    #   upstreamPathPrefix: /v1
+    #   policy: admin
+    #   methods: [GET, POST, PUT, DELETE]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Host: api.example-service.invalid (Example production domain)
+# ──────────────────────────────────────────────────────────────────────────────
+- host: api.example-service.invalid
+  routes:
+
+    - id: auth-login
+      pathPrefix: /v1/auth/login
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/login
+      policy: public
+      methods: [POST]
+
+    - id: auth-register
+      pathPrefix: /v1/auth/register
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/register
+      policy: public
+      methods: [POST]
+
+    - id: auth-refresh
+      pathPrefix: /v1/auth/refresh
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/refresh
+      policy: public
+      methods: [POST]
+
+    - id: jwks
+      pathPrefix: /.well-known
+      upstream: auth
+      upstreamPathPrefix: /.well-known
+      policy: public
+      methods: [GET]
+
+    - id: auth-userinfo
+      pathPrefix: /v1/auth/userinfo
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/userinfo
+      policy: authenticated
+      methods: [GET]
+
+    - id: auth-logout
+      pathPrefix: /v1/auth/logout
+      upstream: auth
+      upstreamPathPrefix: /v1/auth/logout
+      policy: authenticated
+      methods: [POST]
+
+    - id: auth-other
+      pathPrefix: /v1/auth
+      upstream: auth
+      upstreamPathPrefix: /v1/auth
+      policy: authenticated
+      methods: [GET, POST, PUT, PATCH, DELETE]
+
+    - id: example-service
+      pathPrefix: /v1
+      upstream: example-service
+      upstreamPathPrefix: /v1
+      policy: authenticated
+      methods: [GET, POST, PUT, PATCH, DELETE]

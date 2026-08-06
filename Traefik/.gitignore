@@ -1,0 +1,6 @@
+# Local overrides
+.env
+*.local
+
+# Traefik acme (if TLS is added later)
+acme.json

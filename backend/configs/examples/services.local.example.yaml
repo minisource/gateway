@@ -1,0 +1,28 @@
+# =============================================================================
+# MiniSource Gateway — Private/Local Configuration Overlay Example
+# =============================================================================
+# Copy this file to: configs.local/services.local.yaml or config.local.yaml
+#
+# WARNING: *.local.yaml and configs.local/ are .gitignored.
+# NEVER commit real private service URLs, tokens, or credentials.
+# =============================================================================
+
+services:
+  # Example private/local upstream service
+  example-service:
+    baseUrl: "http://127.0.0.1:9090"
+    timeout: "30s"
+    healthPath: "/health"
+    public: false
+
+hosts:
+  - host: "localhost"
+    routes:
+      # Example route mapping to private local service
+      - id: "example-private-route"
+        pathPrefix: "/v1/example"
+        upstream: "example-service"
+        stripPrefix: "/v1/example"
+        upstreamPathPrefix: "/v1"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "DELETE"]
