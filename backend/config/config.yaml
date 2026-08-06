@@ -94,6 +94,12 @@ services:
     healthPath: "/notifier/dashboard"
     public: true
 
+  yadyar:
+    baseUrl: "http://yadyar-backend:9010"
+    timeout: "30s"
+    healthPath: "/health"
+    public: true
+
   log:
     baseUrl: "http://127.0.0.1:5002"
     timeout: "30s"
@@ -565,3 +571,29 @@ hosts:
         upstreamPathPrefix: "/notifier"
         policy: "public"
         methods: ["GET", "POST"]
+
+  - host: "yadyarapi.minisource.ir"
+    routes:
+      - id: "yadyar-health-prod"
+        pathPrefix: "/yadyar/health"
+        upstream: "yadyar"
+        stripPrefix: "/yadyar/health"
+        upstreamPathPrefix: "/health"
+        policy: "public"
+        methods: ["GET"]
+
+      - id: "yadyar-ready-prod"
+        pathPrefix: "/yadyar/ready"
+        upstream: "yadyar"
+        stripPrefix: "/yadyar/ready"
+        upstreamPathPrefix: "/ready"
+        policy: "public"
+        methods: ["GET"]
+
+      - id: "yadyar-api-prod"
+        pathPrefix: "/v1/yadyar"
+        upstream: "yadyar"
+        stripPrefix: "/v1/yadyar"
+        upstreamPathPrefix: "/v1"
+        policy: "authenticated"
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
