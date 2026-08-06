@@ -38,7 +38,7 @@ jobs:
     needs: backend
     uses: minisource/.github/.github/workflows/docker-release.yml@main
     with:
-      image-name: ${{ secrets.DOCKERHUB_USERNAME }}/gateway
+      image-name: minisource/gateway
       dockerfile-path: backend/Dockerfile
       build-context: .
     secrets:
