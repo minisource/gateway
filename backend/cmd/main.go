@@ -14,8 +14,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/swagger"
-	commonMiddleware "github.com/minisource/go-common/http/middleware"
-	commonTracing "github.com/minisource/go-common/tracing"
 	"github.com/minisource/gateway/config"
 	_ "github.com/minisource/gateway/docs"
 	"github.com/minisource/gateway/internal/handler"
@@ -23,6 +21,8 @@ import (
 	"github.com/minisource/gateway/internal/proxy"
 	"github.com/minisource/gateway/internal/respond"
 	"github.com/minisource/gateway/internal/router"
+	commonMiddleware "github.com/minisource/go-common/http/middleware"
+	commonTracing "github.com/minisource/go-common/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
