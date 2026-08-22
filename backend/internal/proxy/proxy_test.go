@@ -25,30 +25,33 @@ func newTestProxy() *ServiceProxy {
 func TestHealthCheckRequiresConsecutiveFailures(t *testing.T) {
 	p := newTestProxy()
 
-	// First failure alone must NOT flip the service to unhealthy.
-	p.recordHealth("test", false)
-	if svc, _ := p.GetService("test"); !svc.Healthy {
-		t.Fatal("service must stay healthy after a single failure (threshold=2)")
-	}
-	if svc, _ := p.GetService("test"); svc.HealthFailures != 1 {
-		t.Fatalf("expected 1 consecutive failure, got %d", svc.HealthFailures)
+	// Failures below the threshold must NOT flip the service to unhealthy.
+	for i := 1; i < healthFailThreshold; i++ {
+		p.recordHealth("test", false)
+		if svc, _ := p.GetService("test"); !svc.Healthy {
+			t.Fatalf("service must stay healthy after %d failure(s), threshold=%d", i, healthFailThreshold)
+		}
+		if svc, _ := p.GetService("test"); svc.HealthFailures != i {
+			t.Fatalf("expected %d consecutive failures, got %d", i, svc.HealthFailures)
+		}
 	}
 
-	// Second consecutive failure must flip it to unhealthy.
+	// The threshold-th consecutive failure must flip it to unhealthy.
 	p.recordHealth("test", false)
 	if svc, _ := p.GetService("test"); svc.Healthy {
-		t.Fatal("service must be unhealthy after 2 consecutive failures")
+		t.Fatalf("service must be unhealthy after %d consecutive failures", healthFailThreshold)
 	}
 }
 
 func TestHealthCheckSuccessResetsFailures(t *testing.T) {
 	p := newTestProxy()
 
-	// Two failures → unhealthy.
-	p.HealthCheck("test")
-	p.HealthCheck("test")
+	// Threshold failures → unhealthy.
+	for i := 0; i < healthFailThreshold; i++ {
+		p.HealthCheck("test")
+	}
 	if svc, _ := p.GetService("test"); svc.Healthy {
-		t.Fatal("expected unhealthy after 2 failures")
+		t.Fatalf("expected unhealthy after %d failures", healthFailThreshold)
 	}
 
 	// A success must reset the counter and restore health.
@@ -61,24 +64,27 @@ func TestHealthCheckSuccessResetsFailures(t *testing.T) {
 	}
 }
 
-func TestHealthCheckFailureCounterCappedAtThreshold(t *testing.T) {
+func TestHealthCheckFailureCounterKeepsGrowingPastThreshold(t *testing.T) {
 	p := newTestProxy()
 
-	// Three failures: counter keeps growing but state stays unhealthy.
-	for i := 0; i < 3; i++ {
+	// Threshold failures flip state; further failures keep the counter growing.
+	for i := 0; i < healthFailThreshold; i++ {
 		p.recordHealth("test", false)
 	}
 	svc, _ := p.GetService("test")
 	if svc.Healthy {
-		t.Fatal("expected unhealthy after multiple failures")
+		t.Fatal("expected unhealthy after threshold failures")
 	}
-	if svc.HealthFailures != 3 {
-		t.Fatalf("expected counter at 3, got %d", svc.HealthFailures)
+	if svc.HealthFailures != healthFailThreshold {
+		t.Fatalf("expected counter at %d, got %d", healthFailThreshold, svc.HealthFailures)
 	}
 	// Still unhealthy after more failures.
 	p.recordHealth("test", false)
 	if svc, _ := p.GetService("test"); svc.Healthy {
 		t.Fatal("expected service to remain unhealthy")
+	}
+	if svc, _ := p.GetService("test"); svc.HealthFailures != healthFailThreshold+1 {
+		t.Fatalf("expected counter at %d, got %d", healthFailThreshold+1, svc.HealthFailures)
 	}
 }
 

@@ -1,8 +1,12 @@
 package proxy
 
 import (
-	"fmt"
+	"bufio"
+	"bytes"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -34,12 +38,20 @@ type ServiceClient struct {
 // healthCheckTimeout bounds each individual health probe. Next.js dev servers
 // can take longer than a typical liveness check during cold/re-compilation, so
 // this must be generous enough to avoid false negatives in local development.
-const healthCheckTimeout = 15 * time.Second
+const healthCheckTimeout = 30 * time.Second
 
 // healthFailThreshold is the number of consecutive failed probes required
 // before a service is marked unhealthy. A single slow response (e.g. Next.js
 // cold compile) must not take the service out of rotation.
-const healthFailThreshold = 2
+const healthFailThreshold = 10
+
+// tunnelDialTimeout bounds establishing the upstream TCP connection for
+// hijacked streaming requests (SSE / WebSocket).
+const tunnelDialTimeout = 10 * time.Second
+
+// tunnelHandshakeTimeout bounds writing the request and reading the upstream
+// response headers before the open-ended stream phase begins.
+const tunnelHandshakeTimeout = 30 * time.Second
 
 // NewServiceProxy creates a proxy from the GatewayConfig services map.
 func NewServiceProxy(cfg *config.GatewayConfig) *ServiceProxy {
@@ -61,9 +73,22 @@ func NewServiceProxy(cfg *config.GatewayConfig) *ServiceProxy {
 			Healthy:    true,
 			Client: &fasthttp.Client{
 				MaxConnsPerHost:     200,
-				MaxIdleConnDuration: 30 * time.Second,
+				MaxIdleConnDuration: 5 * time.Second, // upstreams (e.g. Next dev) drop idle conns fast — don't hold them longer than they do
 				ReadTimeout:         timeout,
 				WriteTimeout:        timeout,
+				RetryIfErr: func(req *fasthttp.Request, _ int, _ error) (bool, bool) {
+					// GATEWAY-002: a pooled keep-alive connection can go stale (the
+					// upstream closed it after an idle gap) and fail on reuse — this
+					// intermittently 502/500s parallel asset loads through the gateway.
+					// Retrying once on a fresh connection fixes it. Only idempotent
+					// methods are retried so a replayed request body can never
+					// double-submit an upstream mutation.
+					switch string(req.Header.Method()) {
+					case http.MethodGet, http.MethodHead, http.MethodOptions:
+						return false, true
+					}
+					return false, false
+				},
 			},
 		}
 	}
@@ -89,25 +114,25 @@ func (p *ServiceProxy) Forward(c *fiber.Ctx, serviceName string, stripPrefix str
 func (p *ServiceProxy) ForwardWithPrefix(c *fiber.Ctx, serviceName string, stripPrefix string, upstreamPathPrefix string) error {
 	svc, ok := p.GetService(serviceName)
 	if !ok {
-		return respond.WriteError(c, fiber.StatusBadGateway, "SERVICE_NOT_FOUND",
-			fmt.Sprintf("service %s not found", serviceName),
+		msg := respond.T(c, "errors.service_not_found", map[string]interface{}{"Service": serviceName})
+		return respond.WriteError(c, fiber.StatusBadGateway, "SERVICE_NOT_FOUND", msg,
 			fiber.Map{
 				"success": false,
 				"error": fiber.Map{
 					"code":    "SERVICE_NOT_FOUND",
-					"message": fmt.Sprintf("service %s not found", serviceName),
+					"message": msg,
 				},
 			})
 	}
 
 	if !svc.Healthy {
-		return respond.WriteError(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
-			fmt.Sprintf("service %s is unavailable", serviceName),
+		msg := respond.T(c, "errors.service_unavailable_name", map[string]interface{}{"Service": serviceName})
+		return respond.WriteError(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", msg,
 			fiber.Map{
 				"success": false,
 				"error": fiber.Map{
 					"code":    "SERVICE_UNAVAILABLE",
-					"message": fmt.Sprintf("service %s is unavailable", serviceName),
+					"message": msg,
 				},
 			})
 	}
@@ -135,25 +160,26 @@ func (p *ServiceProxy) ForwardWithPrefix(c *fiber.Ctx, serviceName string, strip
 	}
 
 	queryString := string(c.Request().URI().QueryString())
-	targetURL := svc.URL + path
+	pathWithQuery := path
 	if queryString != "" {
-		targetURL += "?" + queryString
+		pathWithQuery += "?" + queryString
 	}
+
+	targetURL := svc.URL + pathWithQuery
 
 	// Create upstream request
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseRequest(req)
 	defer fasthttp.ReleaseResponse(resp)
 
-	// Copy request
+	// Set full targetURL for fasthttp.Client.Do
 	req.SetRequestURI(targetURL)
 	req.Header.SetMethod(string(c.Request().Header.Method()))
 
-	// Copy headers (skip hop-by-hop)
+	// Copy headers (skip hop-by-hop and websocket extensions that corrupt RSV1 bit)
 	c.Request().Header.VisitAll(func(key, value []byte) {
 		keyStr := string(key)
-		if isHopByHopHeader(keyStr) {
+		if isHopByHopHeader(keyStr) || strings.EqualFold(keyStr, "Sec-WebSocket-Extensions") {
 			return
 		}
 		req.Header.SetBytesKV(key, value)
@@ -179,24 +205,34 @@ func (p *ServiceProxy) ForwardWithPrefix(c *fiber.Ctx, serviceName string, strip
 	// Inject trace context propagation for downstream
 	otel.GetTextMapPropagator().Inject(c.UserContext(), &fasthttpHeaderCarrier{h: &req.Header})
 
+	// Streaming requests (SSE / WebSocket) bypass the pooled fasthttp client:
+	// a transparent hijack tunnel relays raw bytes so chunks and upgrade frames
+	// reach the client as they arrive instead of after the upstream connection
+	// closes. forwardStream serializes req and releases it itself.
+	if isStreamingRequest(c) {
+		return p.forwardStream(c, req, svc)
+	}
+
+	defer fasthttp.ReleaseRequest(req)
+
 	// Execute request
 	if err := svc.Client.Do(req, resp); err != nil {
-		return respond.WriteError(c, fiber.StatusBadGateway, "UPSTREAM_ERROR",
-			"Upstream request failed",
+		msg := respond.T(c, "errors.upstream_error")
+		return respond.WriteError(c, fiber.StatusBadGateway, "UPSTREAM_ERROR", msg,
 			fiber.Map{
 				"success": false,
 				"error": fiber.Map{
 					"code":    "UPSTREAM_ERROR",
-					"message": "Upstream request failed",
+					"message": msg,
 					"details": err.Error(),
 				},
 			})
 	}
 
-	// Copy response headers (skip hop-by-hop)
+	// Copy response headers (skip hop-by-hop and websocket extensions)
 	resp.Header.VisitAll(func(key, value []byte) {
 		keyStr := string(key)
-		if isHopByHopHeader(keyStr) {
+		if isHopByHopHeader(keyStr) || strings.EqualFold(keyStr, "Sec-WebSocket-Extensions") {
 			return
 		}
 		c.Set(keyStr, string(value))
@@ -284,14 +320,12 @@ func (p *ServiceProxy) Close() error {
 
 func isHopByHopHeader(header string) bool {
 	hopByHopHeaders := map[string]bool{
-		"Connection":          true,
 		"Keep-Alive":          true,
 		"Proxy-Authenticate":  true,
 		"Proxy-Authorization": true,
 		"Te":                  true,
 		"Trailers":            true,
 		"Transfer-Encoding":   true,
-		"Upgrade":             true,
 	}
 	return hopByHopHeaders[http.CanonicalHeaderKey(header)]
 }
@@ -314,4 +348,148 @@ func (c *fasthttpHeaderCarrier) Keys() []string {
 		keys = append(keys, string(k))
 	})
 	return keys
+}
+
+// isStreamingRequest reports whether the client request needs a transparent
+// byte-stream proxy instead of the buffered response path:
+//   - WebSocket upgrade (Connection: Upgrade + Upgrade: websocket)
+//   - Server-Sent Events (Accept: text/event-stream)
+func isStreamingRequest(c *fiber.Ctx) bool {
+	if strings.EqualFold(c.Get("Upgrade"), "websocket") {
+		return strings.Contains(strings.ToLower(c.Get("Connection")), "upgrade")
+	}
+	return strings.Contains(strings.ToLower(c.Get("Accept")), "text/event-stream")
+}
+
+// forwardStream proxies a streaming request by hijacking the client
+// connection and tunneling raw bytes to/from the upstream service. The
+// pooled fasthttp client cannot represent an open-ended response body, so
+// SSE chunks and WebSocket frames must flow over raw TCP.
+func (p *ServiceProxy) forwardStream(c *fiber.Ctx, req *fasthttp.Request, svc *ServiceClient) error {
+	// Set relative path on request URI for standard HTTP/1.1 raw TCP request line
+	req.SetRequestURI(string(req.URI().RequestURI()))
+
+	// WebSocket extension negotiation must reach the upstream untouched; the
+	// shared request build skips it for the pooled-client path.
+	if ext := c.Get("Sec-WebSocket-Extensions"); ext != "" {
+		req.Header.Set("Sec-WebSocket-Extensions", ext)
+	}
+
+	// Serialize the upstream request now and release the pooled object: the
+	// hijack handler runs after this handler returns and only consumes the
+	// copied bytes, never req itself.
+	var raw bytes.Buffer
+	if _, err := req.WriteTo(&raw); err != nil {
+		fasthttp.ReleaseRequest(req)
+		msg := respond.T(c, "errors.upstream_error")
+		return respond.WriteError(c, fiber.StatusBadGateway, "UPSTREAM_ERROR", msg,
+			fiber.Map{
+				"success": false,
+				"error": fiber.Map{
+					"code":    "UPSTREAM_ERROR",
+					"message": msg,
+					"details": err.Error(),
+				},
+			})
+	}
+	fasthttp.ReleaseRequest(req)
+
+	// Tell fasthttp to write no response itself: the tunnel writes the status
+	// line, headers and body directly to the hijacked connection.
+	c.Context().HijackSetNoResponse(true)
+	c.Context().Hijack(func(clientConn net.Conn) {
+		p.runTunnel(clientConn, raw.Bytes(), svc)
+	})
+	return nil
+}
+
+// runTunnel relays a hijacked client connection to the upstream service:
+// dial → write request → relay upstream headers → bidirectional byte copy.
+// The handshake phase is bounded; the stream phase has no deadline because
+// SSE heartbeats and WebSocket sessions are open-ended by nature.
+func (p *ServiceProxy) runTunnel(clientConn net.Conn, raw []byte, svc *ServiceClient) {
+	defer clientConn.Close()
+
+	upstreamAddr, err := upstreamHostPort(svc.URL)
+	if err != nil {
+		return
+	}
+
+	upConn, err := net.DialTimeout("tcp", upstreamAddr, tunnelDialTimeout)
+	if err != nil {
+		return
+	}
+	defer upConn.Close()
+
+	deadline := time.Now().Add(tunnelHandshakeTimeout)
+	_ = upConn.SetDeadline(deadline)
+	_ = clientConn.SetDeadline(deadline)
+
+	if _, err := upConn.Write(raw); err != nil {
+		return
+	}
+
+	// Read the raw upstream HTTP response head (until \r\n\r\n) and forward directly to client.
+	br := bufio.NewReader(upConn)
+	var responseHead bytes.Buffer
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			return
+		}
+		responseHead.WriteString(line)
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	if _, err := clientConn.Write(responseHead.Bytes()); err != nil {
+		return
+	}
+
+	// Stream phase: long-lived connection, no deadlines.
+	_ = upConn.SetDeadline(time.Time{})
+	_ = clientConn.SetDeadline(time.Time{})
+
+	done := make(chan struct{}, 2)
+	// Upstream → client. br preserves any body bytes already buffered.
+	go func() {
+		defer func() { done <- struct{}{} }()
+		_, _ = io.Copy(clientConn, br)
+	}()
+	// Client → upstream (WebSocket frames, late request bodies).
+	go func() {
+		defer func() { done <- struct{}{} }()
+		_, _ = io.Copy(upConn, clientConn)
+	}()
+
+	// When one direction ends (upstream closed an SSE stream, or either side
+	// closed a WebSocket session), close both ends to unblock the other copy.
+	<-done
+	_ = upConn.Close()
+	_ = clientConn.Close()
+	<-done
+}
+
+// upstreamHostPort extracts the dialable host:port from a service base URL,
+// defaulting to port 80/443 when the scheme implies it and no port is given.
+func upstreamHostPort(baseURL string) (string, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	host := u.Host
+	if host == "" {
+		host = strings.TrimPrefix(baseURL, "http://")
+		host = strings.TrimPrefix(host, "https://")
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		switch u.Scheme {
+		case "https":
+			return net.JoinHostPort(host, "443"), nil
+		default:
+			return net.JoinHostPort(host, "80"), nil
+		}
+	}
+	return host, nil
 }

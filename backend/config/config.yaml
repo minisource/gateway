@@ -335,6 +335,17 @@ hosts:
         policy: "authenticated"
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
 
+      # Notifier realtime admin events (SSE). Namespaced under /v1/notifier so
+      # it cannot collide with auth's /v1/admin/events (auth-admin catch-all).
+      # The request path is rewritten: /v1/notifier/admin/events → /v1/admin/events.
+      - id: "notifier-admin-events"
+        pathPrefix: "/v1/notifier/admin/events"
+        upstream: "notifier"
+        stripPrefix: "/v1/notifier"
+        upstreamPathPrefix: "/v1"
+        policy: "authenticated"
+        methods: ["GET"]
+
       - id: "auth-admin"
         pathPrefix: "/v1/admin"
         upstream: "auth"

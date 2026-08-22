@@ -102,6 +102,71 @@ func TestNoAcceptHeaderDefaultsToJSON(t *testing.T) {
 	require.True(t, strings.Contains(ct, "application/json"), "expected JSON content type, got %q", ct)
 }
 
+func TestPersianBrowserGetsLocalizedHTML(t *testing.T) {
+	app := fiber.New()
+	app.Get("/err", func(c *fiber.Ctx) error {
+		return WriteError(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", T(c, "errors.service_unavailable"), jsonPayload())
+	})
+
+	req := httptest.NewRequest("GET", "/err", nil)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req.Header.Set("Accept-Language", "fa")
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+	// Persian: RTL document + translated strings.
+	require.True(t, strings.Contains(html, `lang="fa" dir="rtl"`), "expected fa/rtl html tag, got: %s", html)
+	require.True(t, strings.Contains(html, "تلاش مجدد"), "expected Persian retry button")
+	require.True(t, strings.Contains(html, "سرویس به‌طور موقت در دسترس نیست"), "expected Persian heading")
+}
+
+func TestPersianAPIClientGetsLocalizedJSON(t *testing.T) {
+	app := fiber.New()
+	app.Get("/err", func(c *fiber.Ctx) error {
+		msg := T(c, "errors.service_unavailable")
+		return WriteError(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", msg, fiber.Map{
+			"success": false,
+			"error": fiber.Map{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": msg,
+			},
+		})
+	})
+
+	req := httptest.NewRequest("GET", "/err", nil)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Language", "fa-IR, fa;q=0.9, en;q=0.8")
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	jsonBody := string(body)
+	require.True(t, strings.Contains(jsonBody, "سرویس به‌طور موقت در دسترس نیست"), "expected Persian message, got: %s", jsonBody)
+	require.True(t, strings.Contains(jsonBody, `"code":"SERVICE_UNAVAILABLE"`), "code must stay machine-readable: %s", jsonBody)
+}
+
+func TestEnglishDefaultFallback(t *testing.T) {
+	app := fiber.New()
+	app.Get("/err", func(c *fiber.Ctx) error {
+		return WriteError(c, fiber.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", T(c, "errors.service_unavailable"), jsonPayload())
+	})
+
+	// No Accept-Language → English default.
+	req := httptest.NewRequest("GET", "/err", nil)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+	require.True(t, strings.Contains(html, `lang="en" dir="ltr"`), "expected en/ltr html tag, got: %s", html)
+	require.True(t, strings.Contains(html, "Try again"), "expected English retry button")
+}
+
 func TestIsBrowserRequest(t *testing.T) {
 	cases := []struct {
 		name string

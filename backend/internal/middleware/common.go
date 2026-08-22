@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/minisource/gateway/internal/respond"
 )
 
 // RequestID adds a unique request ID to each request
@@ -86,7 +87,7 @@ func ContentType() fiber.Handler {
 			if contentType == "" && len(c.Body()) > 0 {
 				return c.Status(fiber.StatusUnsupportedMediaType).JSON(fiber.Map{
 					"error":   "unsupported_media_type",
-					"message": "Content-Type header is required for request body",
+					"message": respond.T(c, "errors.content_type_required"),
 				})
 			}
 		}
@@ -147,7 +148,7 @@ func Recover() fiber.Handler {
 
 				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error":      "internal_server_error",
-					"message":    "An unexpected error occurred",
+					"message":    respond.T(c, "errors.unexpected_error"),
 					"request_id": requestID,
 				})
 			}

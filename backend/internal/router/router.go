@@ -1,6 +1,7 @@
 package router
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -35,6 +36,17 @@ func New(app *fiber.App, serviceProxy *proxy.ServiceProxy, gwCfg *config.Gateway
 		auth:       auth,
 		hostRoutes: make(map[string][]config.RouteCfg),
 	}
+	// Sort each host's routes by path specificity (longest prefix first) so that
+	// overlapping prefixes like "/divipay/app" always beat "/divipay" — regardless
+	// of the order routes appear in YAML or how overlays merge them. Fiber matches
+	// in registration order, so an unsorted generic prefix would silently shadow
+	// more specific routes and proxy requests to the WRONG upstream (upstreams then
+	// answer with their own "Cannot GET /..." 404s — e.g. /divipay/app hitting the
+	// DiviPay backend instead of the dashboard).
+	for i := range gwCfg.Hosts {
+		sortRoutesBySpecificity(gwCfg.Hosts[i].Routes)
+	}
+
 	// Index routes by host for O(1) lookup
 	for _, host := range gwCfg.Hosts {
 		r.hostRoutes[strings.ToLower(host.Host)] = host.Routes
@@ -63,9 +75,9 @@ func (r *Router) SetupRoutes() {
 		host := c.Hostname()
 		matched := r.findHost(host)
 		if matched == nil {
-			return gatewayError(c, fiber.StatusNotFound, "HOST_NOT_FOUND", "Unknown host: "+host)
+			return gatewayError(c, fiber.StatusNotFound, "HOST_NOT_FOUND", "errors.host_not_found")
 		}
-		return gatewayError(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "Route not found: "+c.Method()+" "+c.Path())
+		return gatewayError(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "errors.route_not_found")
 	})
 }
 
@@ -122,8 +134,7 @@ func (r *Router) createProxyHandler(host string, route config.RouteCfg) fiber.Ha
 		if requestHost != strings.ToLower(host) {
 			// In production/staging: strict host match, no fallback. Unknown hosts → 404.
 			if isProduction {
-				return gatewayError(c, fiber.StatusNotFound, "HOST_MISMATCH",
-					"Unknown host: "+requestHost)
+				return gatewayError(c, fiber.StatusNotFound, "HOST_MISMATCH", "errors.host_not_found")
 			}
 			// In development: localhost routes accept any host (e.g. 127.0.0.1, 10.0.2.2 from emulator)
 			// Non-localhost routes are skipped unless explicitly requested.
@@ -190,18 +201,24 @@ func (r *Router) findHost(host string) *config.HostCfg {
 }
 
 // FindRoute finds the matching RouteCfg for a given host+path+method.
+// The most specific (longest) path prefix wins, independent of config order.
 func (r *Router) FindRoute(host, path, method string) *config.RouteCfg {
 	hostCfg := r.findHost(host)
 	if hostCfg == nil {
 		return nil
 	}
+	var best *config.RouteCfg
+	bestLen := -1
 	for i := range hostCfg.Routes {
 		route := &hostCfg.Routes[i]
 		if matchesPathPrefix(path, route.PathPrefix) && containsMethod(route.Methods, method) {
-			return route
+			if len(route.PathPrefix) > bestLen {
+				best = route
+				bestLen = len(route.PathPrefix)
+			}
 		}
 	}
-	return nil
+	return best
 }
 
 // GetRoutePolicy returns the route policy for the current request.
@@ -215,6 +232,19 @@ func (r *Router) GetRoutePolicy(host, path, method string) string {
 }
 
 // ─── Helpers ────────────────────────────────────────────────
+
+// sortRoutesBySpecificity orders a host's routes so more specific (longer) path
+// prefixes are registered and matched first. Ties (same prefix length) keep the
+// original stable order, so identical-prefix routes with different methods are
+// unaffected.
+func sortRoutesBySpecificity(routes []config.RouteCfg) {
+	sort.SliceStable(routes, func(i, j int) bool {
+		if len(routes[i].PathPrefix) != len(routes[j].PathPrefix) {
+			return len(routes[i].PathPrefix) > len(routes[j].PathPrefix)
+		}
+		return routes[i].ID < routes[j].ID
+	})
+}
 
 func matchesPathPrefix(requestPath, prefix string) bool {
 	if requestPath == prefix {
@@ -240,14 +270,32 @@ func containsMethod(methods []string, method string) bool {
 
 // gatewayError returns a standardized gateway error response.
 // Browsers receive a friendly HTML page; API clients receive the JSON payload.
-func gatewayError(c *fiber.Ctx, status int, code, message string) error {
-	return respond.WriteError(c, status, code, message, fiber.Map{
+// messageKey is an i18n key resolved against the request language (en/fa).
+// Diagnostic context (host, method+path) is kept as details for API clients only;
+// the HTML page never renders it.
+func gatewayError(c *fiber.Ctx, status int, code, messageKey string) error {
+	msg := respond.T(c, messageKey)
+
+	details := ""
+	switch code {
+	case "HOST_NOT_FOUND", "HOST_MISMATCH":
+		details = "host: " + c.Hostname()
+	case "ROUTE_NOT_FOUND":
+		details = c.Method() + " " + c.Path()
+	}
+
+	payload := fiber.Map{
 		"success": false,
 		"error": fiber.Map{
 			"code":    code,
-			"message": message,
+			"message": msg,
 		},
 		"path":   c.Path(),
 		"method": c.Method(),
-	})
+	}
+	if details != "" {
+		payload["details"] = details
+	}
+
+	return respond.WriteError(c, status, code, msg, payload)
 }

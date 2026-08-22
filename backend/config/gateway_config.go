@@ -344,6 +344,11 @@ func defaultGatewayConfig() *GatewayConfig {
 					{ID: "auth-users", PathPrefix: "/v1/users", Upstream: "auth", UpstreamPathPrefix: "/v1/users", Policy: "authenticated", Methods: []string{"GET", "PUT", "POST", "DELETE"}},
 					// Auth catch-all for other paths
 					{ID: "auth-other", PathPrefix: "/v1/auth", Upstream: "auth", UpstreamPathPrefix: "/v1/auth", Policy: "authenticated", Methods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}},
+					// Admin — auth owns the /v1/admin namespace (incl. /v1/admin/events SSE)
+					{ID: "auth-admin", PathPrefix: "/v1/admin", Upstream: "auth", UpstreamPathPrefix: "/v1/admin", Policy: "authenticated", Methods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}},
+					// Notifier realtime admin events (SSE) — namespaced to avoid the
+					// /v1/admin/events collision; rewritten to upstream /v1/admin/events
+					{ID: "notifier-admin-events", PathPrefix: "/v1/notifier/admin/events", Upstream: "notifier", StripPrefix: "/v1/notifier", UpstreamPathPrefix: "/v1", Policy: "authenticated", Methods: []string{"GET"}},
 					// Storage — Gateway /v1/storage/* → upstream /api/v1/*
 					{ID: "storage", PathPrefix: "/v1/storage", Upstream: "storage", StripPrefix: "/v1/storage", UpstreamPathPrefix: "/api/v1", Policy: "authenticated", Methods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}},
 					// Public share access (no auth)

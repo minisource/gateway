@@ -3,6 +3,7 @@ package middleware
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/minisource/gateway/config"
+	"github.com/minisource/gateway/internal/respond"
 )
 
 // AuthMiddleware enforces route policies: public, authenticated, admin, internal, disabled.
@@ -87,7 +89,7 @@ func (a *AuthMiddleware) EnforcePolicy(c *fiber.Ctx, policy string) error {
 		return nil
 
 	case "disabled", "internal":
-		return gatewayErrorResponse(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "Route not found")
+		return gatewayErrorResponse(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "errors.route_not_found")
 
 	case "authenticated", "admin":
 		if !a.cfg.Enabled || !a.cfg.ValidateAtGateway {
@@ -98,7 +100,7 @@ func (a *AuthMiddleware) EnforcePolicy(c *fiber.Ctx, policy string) error {
 		// Validate JWT against configured mode
 		claims, err := a.validateToken(c)
 		if err != nil {
-			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
+			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "errors.auth_required", err.Error())
 		}
 
 		// Set trusted identity headers from validated JWT
@@ -108,7 +110,7 @@ func (a *AuthMiddleware) EnforcePolicy(c *fiber.Ctx, policy string) error {
 
 		// Admin policy: require admin role
 		if policy == "admin" && !hasAdminRole(claims.Roles) {
-			return gatewayErrorResponse(c, fiber.StatusForbidden, "FORBIDDEN", "Admin role required")
+			return gatewayErrorResponse(c, fiber.StatusForbidden, "FORBIDDEN", "errors.admin_role_required")
 		}
 
 		return nil
@@ -394,17 +396,17 @@ func Auth(cfg AuthConfig) fiber.Handler {
 
 		authHeader := c.Get(cfg.HeaderName)
 		if authHeader == "" {
-			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "Missing authorization header")
+			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "errors.token_required")
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, cfg.TokenPrefix)
 		if tokenString == authHeader {
-			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "Invalid authorization format")
+			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "errors.token_invalid")
 		}
 
 		claims, err := legacyValidateToken(tokenString, cfg.JWTSecret)
 		if err != nil {
-			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "INVALID_TOKEN", err.Error())
+			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "INVALID_TOKEN", "errors.token_invalid", err.Error())
 		}
 
 		c.Locals(cfg.ContextKey, claims)
@@ -456,7 +458,7 @@ func RequireRoles(roles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		claims, ok := c.Locals("user").(*Claims)
 		if !ok {
-			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "No user context found")
+			return gatewayErrorResponse(c, fiber.StatusUnauthorized, "AUTH_REQUIRED", "errors.token_required")
 		}
 		for _, requiredRole := range roles {
 			for _, userRole := range claims.Roles {
@@ -465,11 +467,15 @@ func RequireRoles(roles ...string) fiber.Handler {
 				}
 			}
 		}
-		return gatewayErrorResponse(c, fiber.StatusForbidden, "FORBIDDEN", "Insufficient permissions")
+		return gatewayErrorResponse(c, fiber.StatusForbidden, "FORBIDDEN", "errors.permission_denied")
 	}
 }
 
 // TenantExtractor extracts tenant ID from various sources.
+// The hostname-based tenant derivation must NOT run for IP addresses or
+// localhost: "127.0.0.1" / "192.168.x.x" / "[::1]" would be split on "."
+// and yield a bogus tenant (e.g. "127"), poisoning every upstream request
+// with an invalid X-Tenant-ID.
 func TenantExtractor() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var tenantID string
@@ -481,9 +487,17 @@ func TenantExtractor() fiber.Handler {
 		}
 		if tenantID == "" {
 			host := c.Hostname()
-			parts := strings.Split(host, ".")
-			if len(parts) >= 3 {
-				tenantID = parts[0]
+			// c.Hostname() may or may not include the port depending on the
+			// Fiber version; normalize by stripping it explicitly.
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			// IPv4, IPv6, and localhost are never tenant subdomains.
+			if host != "localhost" && net.ParseIP(strings.Trim(host, "[]")) == nil {
+				parts := strings.Split(host, ".")
+				if len(parts) >= 3 {
+					tenantID = parts[0]
+				}
 			}
 		}
 		if tenantID != "" {
@@ -505,13 +519,20 @@ func NewLegacyAuthMiddleware(cfg *config.Config, routes *config.RouteConfig) fib
 	return Auth(authCfg)
 }
 
-// gatewayErrorResponse returns a standardized error.
-func gatewayErrorResponse(c *fiber.Ctx, status int, code, message string) error {
+// gatewayErrorResponse returns a standardized error with a localized message.
+// messageKey is an i18n key (errors.*); optional details (e.g. technical token
+// validation output) are attached for API clients and never shown to browsers.
+func gatewayErrorResponse(c *fiber.Ctx, status int, code, messageKey string, details ...string) error {
+	msg := respond.T(c, messageKey)
+	errInfo := fiber.Map{
+		"code":    code,
+		"message": msg,
+	}
+	if len(details) > 0 && details[0] != "" {
+		errInfo["details"] = details[0]
+	}
 	return c.Status(status).JSON(fiber.Map{
 		"success": false,
-		"error": fiber.Map{
-			"code":    code,
-			"message": message,
-		},
+		"error":   errInfo,
 	})
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/minisource/gateway/config"
+	"github.com/minisource/gateway/internal/respond"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -83,7 +84,7 @@ func (rl *RateLimiter) Middleware() fiber.Handler {
 		if !allowed {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 				"error":       "rate_limit_exceeded",
-				"message":     "Too many requests, please try again later",
+				"message":     respond.T(c, "errors.rate_limit_exceeded"),
 				"retry_after": resetTime - time.Now().Unix(),
 			})
 		}

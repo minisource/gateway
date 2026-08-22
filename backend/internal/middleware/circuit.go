@@ -126,22 +126,22 @@ func (m *CircuitBreakerManager) Middleware() fiber.Handler {
 		if err != nil {
 			// Circuit is open
 			if err == gobreaker.ErrOpenState {
-				return respond.WriteError(c, fiber.StatusServiceUnavailable, "service_unavailable",
-					"Service temporarily unavailable, please try again later",
+				msg := respond.T(c, "errors.service_unavailable")
+				return respond.WriteError(c, fiber.StatusServiceUnavailable, "service_unavailable", msg,
 					fiber.Map{
 						"error":   "service_unavailable",
-						"message": "Service temporarily unavailable, please try again later",
+						"message": msg,
 						"service": serviceName,
 					})
 			}
 
 			// Circuit is half-open but request failed
 			if err == gobreaker.ErrTooManyRequests {
-				return respond.WriteError(c, fiber.StatusServiceUnavailable, "too_many_requests",
-					"Service is recovering, please try again",
+				msg := respond.T(c, "errors.service_recovering")
+				return respond.WriteError(c, fiber.StatusServiceUnavailable, "too_many_requests", msg,
 					fiber.Map{
 						"error":   "too_many_requests",
-						"message": "Service is recovering, please try again",
+						"message": msg,
 						"service": serviceName,
 					})
 			}

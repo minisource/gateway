@@ -126,10 +126,10 @@ func main() {
 	} else {
 		// Return 404 for swagger/metrics in production
 		app.Get("/swagger/*", func(c *fiber.Ctx) error {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not found"})
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": respond.T(c, "errors.not_found")})
 		})
 		app.Get("/metrics", func(c *fiber.Ctx) error {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not found"})
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": respond.T(c, "errors.not_found")})
 		})
 		logger.Info("Swagger & Metrics endpoints DISABLED (production mode)")
 	}
@@ -221,11 +221,30 @@ func gatewayErrorHandler(c *fiber.Ctx, err error) error {
 	if e, ok := err.(*fiber.Error); ok {
 		code = e.Code
 	}
-	return respond.WriteError(c, code, "INTERNAL_ERROR", err.Error(), fiber.Map{
+
+	msgKey := "errors.internal_error"
+	switch code {
+	case fiber.StatusBadRequest:
+		msgKey = "errors.bad_request"
+	case fiber.StatusUnauthorized:
+		msgKey = "errors.unauthorized"
+	case fiber.StatusForbidden:
+		msgKey = "errors.forbidden"
+	case fiber.StatusNotFound:
+		msgKey = "errors.not_found"
+	case fiber.StatusTooManyRequests:
+		msgKey = "errors.too_many_requests"
+	case fiber.StatusServiceUnavailable:
+		msgKey = "errors.service_unavailable"
+	}
+
+	msg := respond.T(c, msgKey)
+	return respond.WriteError(c, code, "INTERNAL_ERROR", msg, fiber.Map{
 		"success": false,
 		"error": fiber.Map{
 			"code":    "INTERNAL_ERROR",
-			"message": err.Error(),
+			"message": msg,
+			"details": err.Error(),
 		},
 	})
 }

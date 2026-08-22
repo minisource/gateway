@@ -172,7 +172,7 @@ func Load() (*Config, error) {
 			RefreshExpiresIn: getDuration("JWT_REFRESH_EXPIRES", 7*24*time.Hour),
 		},
 		RateLimit: RateLimitConfig{
-			Enabled:         getEnvBool("RATE_LIMIT_ENABLED", true),
+			Enabled:         getEnvBool("RATE_LIMIT_ENABLED", false),
 			RequestsPerSec:  getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:       getEnvInt("RATE_LIMIT_BURST", 200),
 			CleanupInterval: getDuration("RATE_LIMIT_CLEANUP", 1*time.Minute),

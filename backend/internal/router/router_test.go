@@ -2,12 +2,14 @@ package router
 
 import (
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/minisource/gateway/config"
 	"github.com/minisource/gateway/internal/middleware"
+	"github.com/minisource/gateway/internal/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,6 +117,69 @@ func TestRouter_HostMatching_UnknownHost_Production(t *testing.T) {
 }
 
 // ─── Route Matching Tests ──────────────────────────────────
+
+func TestRouter_FindRoute_LongestPrefix_OrderIndependent(t *testing.T) {
+	// A generic prefix listed FIRST must not shadow a more specific one — this is
+	// exactly the "Cannot GET /divipay/app" bug (generic /divipay proxying to the
+	// wrong upstream when the config/merge order puts it before /divipay/app).
+	gwCfg := testGatewayConfig()
+	gwCfg.Hosts = []config.HostCfg{
+		{Host: "localhost", Routes: []config.RouteCfg{
+			{ID: "divipay-landing", PathPrefix: "/divipay", Upstream: "divipay", Policy: "public", Methods: []string{"GET"}},
+			{ID: "divipay-dashboard", PathPrefix: "/divipay/app", Upstream: "divipay-dashboard", Policy: "public", Methods: []string{"GET"}},
+		}},
+	}
+
+	app := fiber.New()
+	router := New(app, nil, gwCfg, nil)
+
+	route := router.FindRoute("localhost", "/divipay/app", "GET")
+	require.NotNil(t, route)
+	assert.Equal(t, "divipay-dashboard", route.ID, "specific /divipay/app must win over generic /divipay")
+	assert.Equal(t, "divipay-dashboard", route.Upstream)
+
+	// A bare /divipay path still matches the generic landing route.
+	route = router.FindRoute("localhost", "/divipay", "GET")
+	require.NotNil(t, route)
+	assert.Equal(t, "divipay-landing", route.ID)
+}
+
+func TestRouter_SetupRoutes_OverlappingPrefix_OrderIndependent(t *testing.T) {
+	// End-to-end: with the generic prefix registered first in the config, the
+	// gateway must still proxy /divipay/app to the dashboard upstream (not the
+	// backend that answers "Cannot GET /divipay/app").
+	dashboard := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("DASHBOARD:" + r.URL.Path))
+	}))
+	defer dashboard.Close()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("BACKEND:" + r.URL.Path))
+	}))
+	defer backend.Close()
+
+	gwCfg := testGatewayConfig()
+	gwCfg.Services["divipay"] = &config.ServiceCfg{BaseURL: backend.URL, Timeout: 0, HealthPath: "/health"}
+	gwCfg.Services["divipay-dashboard"] = &config.ServiceCfg{BaseURL: dashboard.URL, Timeout: 0, HealthPath: "/health"}
+	gwCfg.Hosts = []config.HostCfg{
+		{Host: "localhost", Routes: []config.RouteCfg{
+			// Deliberately generic-first, as a naive config merge would produce.
+			{ID: "divipay-landing", PathPrefix: "/divipay", Upstream: "divipay", Policy: "public", Methods: []string{"GET"}},
+			{ID: "divipay-dashboard", PathPrefix: "/divipay/app", Upstream: "divipay-dashboard", Policy: "public", Methods: []string{"GET"}},
+		}},
+	}
+
+	app := fiber.New(fiber.Config{ErrorHandler: defaultErrorHandler})
+	router := New(app, proxy.NewServiceProxy(gwCfg), gwCfg, nil)
+	router.SetupRoutes()
+
+	req := httptest.NewRequest("GET", "http://localhost/divipay/app", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "DASHBOARD", "specific /divipay/app must proxy to the dashboard upstream")
+	assert.NotContains(t, string(body), "BACKEND")
+}
 
 func TestRouter_RouteMatching_LongestPrefixWins(t *testing.T) {
 	gwCfg := testGatewayConfig()

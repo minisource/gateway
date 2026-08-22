@@ -3,6 +3,10 @@
 // friendly, self-contained HTML page instead of a raw JSON error, so users are
 // not confused when an upstream service is deploying or temporarily down.
 // API clients keep the exact JSON payload the caller provides.
+//
+// All user-facing messages are translated via go-common i18n. The language is
+// read from the request (lang query parameter or Accept-Language header) with
+// English as the fallback; Persian (fa) and English (en) are supported.
 package respond
 
 import (
@@ -10,7 +14,19 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/minisource/go-common/i18n"
 )
+
+// T translates an i18n key using the request's language (query ?lang= or
+// Accept-Language header). Returns the key itself when no translation exists.
+func T(c *fiber.Ctx, key string, params ...map[string]interface{}) string {
+	return i18n.T(c, key, params...)
+}
+
+// lang returns the normalized language code ("en" or "fa") for the request.
+func lang(c *fiber.Ctx) string {
+	return i18n.GetTranslator().GetLangFromContext(c)
+}
 
 // IsBrowserRequest reports whether the client expects an HTML document rather
 // than a structured API response. Browsers navigating send Accept: text/html;
@@ -36,44 +52,56 @@ func IsBrowserRequest(c *fiber.Ctx) bool {
 
 // WriteError responds with the given JSON payload to API clients, or with a
 // friendly HTML page to browsers. The JSON payload is passed through verbatim,
-// so per-caller error shapes are preserved exactly.
+// so per-caller error shapes are preserved exactly. Callers should pass an
+// already-translated message (see T) so both API clients and the HTML detail
+// line are localized.
 func WriteError(c *fiber.Ctx, status int, code, message string, jsonPayload fiber.Map) error {
 	if !IsBrowserRequest(c) {
 		return c.Status(status).JSON(jsonPayload)
 	}
 
+	requestLang := lang(c)
 	c.Set(fiber.HeaderContentType, "text/html; charset=utf-8")
 	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	// Let browsers retry automatically once the service comes back.
 	c.Set("Retry-After", "10")
-	return c.Status(status).SendString(errorPage(code, message))
+	return c.Status(status).SendString(errorPage(requestLang, code, message))
 }
 
-// errorPage renders a small, dependency-free maintenance page. It deliberately
-// never includes internal details (dial addresses, upstream URLs, stack traces).
-func errorPage(code, message string) string {
-	title := "Service Unavailable"
-	heading := "We'll be right back"
-	body := "The service you're trying to reach is temporarily unavailable — it may be deploying, restarting, or under maintenance. Please try again in a few seconds."
+// errorPage renders a small, dependency-free maintenance page localized to the
+// request language. It deliberately never includes internal details (dial
+// addresses, upstream URLs, stack traces).
+func errorPage(lang, code, message string) string {
+	dir := "ltr"
+	if lang == "fa" {
+		dir = "rtl"
+	}
+
+	title := i18n.TLang(lang, "gateway.title_unavailable")
+	heading := i18n.TLang(lang, "gateway.heading_back_soon")
+	body := i18n.TLang(lang, "gateway.body_back_soon")
 
 	switch code {
 	case "UPSTREAM_ERROR":
-		heading = "This service is temporarily unreachable"
-		body = "We couldn't reach the service you requested. It may still be starting up or deploying right now. The page will reload automatically in a moment."
+		heading = i18n.TLang(lang, "gateway.heading_upstream")
+		body = i18n.TLang(lang, "gateway.body_upstream")
 	case "SERVICE_UNAVAILABLE", "service_unavailable":
-		heading = "Service is temporarily unavailable"
-		body = "This service is currently unavailable — it may be deploying or under maintenance. Please wait a moment and try again."
+		heading = i18n.TLang(lang, "gateway.heading_unavailable")
+		body = i18n.TLang(lang, "gateway.body_unavailable")
 	case "HOST_NOT_FOUND", "HOST_MISMATCH", "ROUTE_NOT_FOUND":
-		title = "Page Not Found"
-		heading = "This page doesn't exist"
-		body = "The address you entered may be wrong, or the page may have moved."
+		title = i18n.TLang(lang, "gateway.title_not_found")
+		heading = i18n.TLang(lang, "gateway.heading_not_found")
+		body = i18n.TLang(lang, "gateway.body_not_found")
 	}
+
+	tryAgain := i18n.TLang(lang, "common.try_again")
+	reloadHint := i18n.TLang(lang, "common.reload_hint")
 
 	// Escape message once for safe display (it may come from config).
 	safeMsg := html.EscapeString(message)
 
 	return `<!DOCTYPE html>
-<html lang="en">
+<html lang="` + lang + `" dir="` + dir + `">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -84,7 +112,7 @@ func errorPage(code, message string) string {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Vazirmatn", "Tahoma", sans-serif;
     background: #f6f7f9; color: #1a1f2e;
     display: flex; align-items: center; justify-content: center; padding: 24px;
   }
@@ -135,8 +163,8 @@ func errorPage(code, message string) string {
   <h1>` + heading + `</h1>
   <p>` + body + `</p>
   <div class="detail">` + safeMsg + `</div>
-  <button onclick="location.reload()">Try again</button>
-  <div class="hint">This page will reload automatically in a few seconds.</div>
+  <button onclick="location.reload()">` + tryAgain + `</button>
+  <div class="hint">` + reloadHint + `</div>
 </div>
 </body>
 </html>`
